@@ -12,8 +12,8 @@ val scoptVersion = "3.7.1"
 
 libraryDependencies ++= Seq(
   "org.apache.spark"        %% "spark-core"  % sparkVersion % Provided,
-  "org.apache.spark"        %% "spark-sql"   % sparkVersion,
-  "org.apache.spark"        %% "spark-mllib" % sparkVersion,
+  "org.apache.spark"        %% "spark-sql"   % sparkVersion % Provided,
+  "org.apache.spark"        %% "spark-mllib" % sparkVersion % Provided,
   "org.apache.logging.log4j" % "log4j-api"   % log4jVersion,
   "org.apache.logging.log4j" % "log4j-core"  % log4jVersion,
   "com.github.scopt"        %% "scopt"       % scoptVersion

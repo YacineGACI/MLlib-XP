@@ -1,6 +1,6 @@
 package fr.insa.distml
 
-import fr.insa.distml.experiments.{Configuration, Experiments}
+import fr.insa.distml.experiments.{Configuration, Experiment}
 import org.apache.spark.sql.SparkSession
 import scopt.OptionParser
 
@@ -14,11 +14,11 @@ object Main {
       builder.master("local[*]")
     }
 
-    val spark = builder.getOrCreate()
+    implicit val spark: SparkSession = builder.getOrCreate()
 
-    val experiment = Experiments(params.experiment)
+    val experiment = Experiment.from(params.experiment)
 
-    val metrics = experiment.execute(spark, Configuration(params.dataset))
+    val metrics = experiment.execute(Configuration(params.dataset))
 
     println(metrics)
 
@@ -27,7 +27,9 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    val parser = new OptionParser[Params](this.getClass.getSimpleName) {
+    val name = this.getClass.getSimpleName
+
+    val parser = new OptionParser[Params](name) {
       opt[String]("dataset")
         .required()
         .valueName("<file>")
@@ -52,9 +54,5 @@ object Main {
     }
   }
 
-  case class Params(
-       dataset: String  = ".",
-         local: Boolean = false,
-    experiment: String  = ""
-  )
+  case class Params(dataset: String  = ".", local: Boolean = false, experiment: String  = "")
 }

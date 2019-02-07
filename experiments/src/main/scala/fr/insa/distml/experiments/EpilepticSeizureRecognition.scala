@@ -6,9 +6,9 @@ import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.sql.SparkSession
 
-class EpilepticSeizureRecognition extends Experiment {
+object EpilepticSeizureRecognition extends Experiment {
 
-  override def execute(spark: SparkSession, config: Configuration): Metrics = {
+  def execute(config: Configuration)(implicit spark: SparkSession): Metrics = {
 
     val raw = spark.read.format("csv")
       .option("sep",         ",")
@@ -40,7 +40,7 @@ class EpilepticSeizureRecognition extends Experiment {
 
     val f1 = evaluator.evaluate(predictions)
 
-    EpilepticSeizureRecognitionMetrics(f1)
+    EpilepticSeizureRecognitionMetrics(f1 = f1)
   }
 }
 

@@ -7,6 +7,8 @@ List all the datasets that we use for our experiments. They are located in the d
 - 11 500 instances
 - https://archive.ics.uci.edu/ml/datasets/Epileptic+Seizure+Recognition
 
+Fixed warning by adding a name to the first column of the header, instead of a blank value. No data has been changed.
+
 ## HIGGS
 - 28 attributes
 - 11 000 000 instances

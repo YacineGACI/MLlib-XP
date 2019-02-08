@@ -1,8 +1,10 @@
 package fr.insa.distml
 
-import fr.insa.distml.experiments.{Configuration, Experiment}
+import fr.insa.distml.experiments.{Configuration, Experiment, CustomListener}
 import org.apache.spark.sql.SparkSession
 import scopt.OptionParser
+
+import java.io.FileWriter
 
 object Main {
 
@@ -16,11 +18,35 @@ object Main {
 
     implicit val spark: SparkSession = builder.getOrCreate()
 
+    val fw = new FileWriter(params.metrics, true)
+
+    // writes the header line in the csv file
+    try{
+      val header: String = "diskBytesSpilled,executorCpuTime,executorDeserializeCpuTime,executorDeserializeTime," +
+                          "executorRunTime,bytesRead,recordsRead,jvmGCTime,memoryBytesSpilled,bytesWritten," +
+                          "recordsWritten,peakExecutionMemory,resultSerializationTime,resultSize," +
+                          "shuffleFetchWaitTime,shuffleLocalBlocksFetched,shuffleLocalBytesRead," +
+                          "shuffleRecordsRead,shuffleRemoteBlocksFetched,shuffleRemoteBytesRead," +
+                          "shuffleRemoteBytesReadToDisk,shuffleBytesWritten,shuffleRecordsWritten,shuffleWriteTime"
+
+      fw.write(header)
+    }
+    catch{
+      case e: Throwable => fw.close()
+    }
+    
+    
+    val metricsListener = new CustomListener(fw)
+
+    spark.sparkContext.addSparkListener(metricsListener)
+
     val experiment = Experiment.from(params.experiment)
 
     val metrics = experiment.execute(Configuration(params.dataset))
 
     println(metrics)
+
+    fw.close()
 
     spark.stop()
   }
@@ -42,6 +68,12 @@ object Main {
         .action((value, params) => params.copy(experiment = value))
         .text("which experiment to launch")
 
+      opt[String]("metrics")
+        .required()
+        .valueName("<file>")
+        .action((value, params) => params.copy(metrics = value))
+        .text("path to the metrics file")
+
       opt[Unit]("local")
         .optional()
         .action((_, params) => params.copy(local = true))
@@ -54,5 +86,5 @@ object Main {
     }
   }
 
-  case class Params(dataset: String  = ".", local: Boolean = false, experiment: String  = "")
+  case class Params(dataset: String  = ".", local: Boolean = false, experiment: String  = "", metrics: String = "")
 }

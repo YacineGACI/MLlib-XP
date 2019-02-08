@@ -16,7 +16,8 @@ libraryDependencies ++= Seq(
   "org.apache.spark"        %% "spark-mllib" % sparkVersion % Provided,
   "org.apache.logging.log4j" % "log4j-api"   % log4jVersion,
   "org.apache.logging.log4j" % "log4j-core"  % log4jVersion,
-  "com.github.scopt"        %% "scopt"       % scoptVersion
+  "com.github.scopt"        %% "scopt"       % scoptVersion,
+  "org.apache.hadoop"       % "hadoop-client" % "2.7.3"
 )
 
 excludeDependencies ++= Seq(

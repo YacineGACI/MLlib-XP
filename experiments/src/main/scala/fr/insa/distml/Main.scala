@@ -1,83 +1,69 @@
 package fr.insa.distml
 
-import fr.insa.distml.experiments.{Configuration, Experiment, CustomListener}
-import org.apache.spark.sql.SparkSession
+import fr.insa.distml.experiments.Experiment
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import scopt.OptionParser
+import ch.cern.sparkmeasure.StageMetrics
 
-import java.io.FileWriter
 
 object Main {
 
+  def save(df: DataFrame, file: String): Unit = {
+    df.coalesce(1).write.format("json").save(file)
+  }
+
   def startExperiment(params: Params): Unit = {
+
+    val (local, name, dataset, metrics) = (params.local, params.experiment, params.dataset, params.metrics)
 
     val builder = SparkSession.builder
 
-    if (params.local) {
-      builder.master("local[*]")
-    }
+    if(local) builder.master("local[*]")
 
     implicit val spark: SparkSession = builder.getOrCreate()
 
-    val fw = new FileWriter(params.metrics, true)
+    val experiment = Experiment.from(name, dataset)
 
-    // writes the header line in the csv file
-    try{
-      val header: String = "diskBytesSpilled,executorCpuTime,executorDeserializeCpuTime,executorDeserializeTime," +
-                          "executorRunTime,bytesRead,recordsRead,jvmGCTime,memoryBytesSpilled,bytesWritten," +
-                          "recordsWritten,peakExecutionMemory,resultSerializationTime,resultSize," +
-                          "shuffleFetchWaitTime,shuffleLocalBlocksFetched,shuffleLocalBytesRead," +
-                          "shuffleRecordsRead,shuffleRemoteBlocksFetched,shuffleRemoteBytesRead," +
-                          "shuffleRemoteBytesReadToDisk,shuffleBytesWritten,shuffleRecordsWritten,shuffleWriteTime"
+    val stageMetrics = StageMetrics(spark)
 
-      fw.write(header)
-    }
-    catch{
-      case e: Throwable => fw.close()
-    }
-    
-    
-    val metricsListener = new CustomListener(fw)
+    stageMetrics.begin()
 
-    spark.sparkContext.addSparkListener(metricsListener)
+    val appMetrics = experiment.execute()
 
-    val experiment = Experiment.from(params.experiment)
+    stageMetrics.end()
 
-    val metrics = experiment.execute(Configuration(params.dataset))
-
-    println(metrics)
-
-    fw.close()
+    save(stageMetrics.createStageMetricsDF(), s"$metrics/spark-metrics.json")
+    save(stageMetrics.createAccumulablesDF(), s"$metrics/spark-metrics-accumulable.json")
+    save(  appMetrics.createDF(),             s"$metrics/app-metrics.json")
 
     spark.stop()
   }
 
   def main(args: Array[String]): Unit = {
 
-    val name = this.getClass.getSimpleName
-
-    val parser = new OptionParser[Params](name) {
+    val parser = new OptionParser[Params]("DistML") {
       opt[String]("dataset")
         .required()
         .valueName("<file>")
         .action((value, params) => params.copy(dataset = value))
-        .text("path to the dataset")
+        .text("path to the dataset file")
 
       opt[String]("experiment")
         .required()
         .valueName("<name>")
         .action((value, params) => params.copy(experiment = value))
-        .text("which experiment to launch")
+        .text("name of the experiment to launch")
 
       opt[String]("metrics")
-        .required()
-        .valueName("<file>")
-        .action((value, params) => params.copy(metrics = value))
-        .text("path to the metrics file")
+        .optional()
+        .valueName("<dir>")
+        .action((value, params) => params.copy(metrics = value.replaceAll("/$", "")))
+        .text("path to the metrics directory")
 
       opt[Unit]("local")
         .optional()
         .action((_, params) => params.copy(local = true))
-        .text("start a local spark cluster")
+        .text("to start a local spark cluster")
     }
 
     parser.parse(args, Params()) match {
@@ -86,5 +72,10 @@ object Main {
     }
   }
 
-  case class Params(dataset: String  = ".", local: Boolean = false, experiment: String  = "", metrics: String = "")
+  case class Params(
+       dataset: String  = ".",
+         local: Boolean = false,
+    experiment: String  = "",
+       metrics: String  = ""
+  )
 }

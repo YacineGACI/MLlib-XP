@@ -8,20 +8,23 @@ scalaVersion := "2.11.12"
 
 scapegoatVersion in ThisBuild := "1.1.0"
 
-//wartremoverWarnings ++= Warts.all
+// wartremoverWarnings ++= Warts.all
 
-val sparkVersion = "2.4.0"
-val log4jVersion = "2.11.1"
-val scoptVersion = "3.7.1"
+val        sparkVersion = "2.4.0"
+val        log4jVersion = "2.11.1"
+val        scoptVersion = "3.7.1"
+val       hadoopVersion = "2.7.3"
+val sparkMeasureVersion = "0.13"
 
 libraryDependencies ++= Seq(
-  "org.apache.spark"        %% "spark-core"  % sparkVersion % Provided,
-  "org.apache.spark"        %% "spark-sql"   % sparkVersion % Provided,
-  "org.apache.spark"        %% "spark-mllib" % sparkVersion % Provided,
-  "org.apache.logging.log4j" % "log4j-api"   % log4jVersion,
-  "org.apache.logging.log4j" % "log4j-core"  % log4jVersion,
-  "com.github.scopt"        %% "scopt"       % scoptVersion,
-  "org.apache.hadoop"       % "hadoop-client" % "2.7.3"
+  "org.apache.spark"        %% "spark-core"    %        sparkVersion % Provided,
+  "org.apache.spark"        %% "spark-sql"     %        sparkVersion % Provided,
+  "org.apache.spark"        %% "spark-mllib"   %        sparkVersion % Provided,
+  "org.apache.hadoop"        % "hadoop-client" %       hadoopVersion % Provided,
+  "org.apache.logging.log4j" % "log4j-api"     %        log4jVersion % Provided,
+  "org.apache.logging.log4j" % "log4j-core"    %        log4jVersion % Provided,
+  "com.github.scopt"        %% "scopt"         %        scoptVersion,
+  "ch.cern.sparkmeasure"    %% "spark-measure" % sparkMeasureVersion
 )
 
 excludeDependencies ++= Seq(

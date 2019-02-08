@@ -3,18 +3,18 @@ package fr.insa.distml.experiments
 import org.apache.spark.ml.classification.DecisionTreeClassifier
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.VectorAssembler
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
-object EpilepticSeizureRecognition extends Experiment {
+class EpilepticSeizureRecognition(dataset: String) extends Experiment {
 
-  def execute(config: Configuration)(implicit spark: SparkSession): Metrics = {
+  def execute()(implicit spark: SparkSession): Metrics = {
 
     val raw = spark.read
       .format("csv")
       .option("sep", ",")
       .option("inferSchema", "true")
       .option("header", "true")
-      .load(config.dataset)
+      .load(dataset)
 
     val assembler = new VectorAssembler()
       .setInputCols((for (i <- List.range(1, 179)) yield s"X$i").toArray)
@@ -44,4 +44,9 @@ object EpilepticSeizureRecognition extends Experiment {
   }
 }
 
-case class EpilepticSeizureRecognitionMetrics(f1: Double) extends Metrics
+case class EpilepticSeizureRecognitionMetrics(f1: Double) extends Metrics {
+  override def createDF()(implicit spark: SparkSession): DataFrame = {
+    import spark.implicits._
+    Seq(this).toDF
+  }
+}

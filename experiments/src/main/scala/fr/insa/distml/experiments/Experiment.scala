@@ -1,18 +1,22 @@
 package fr.insa.distml.experiments
 
 import java.util.NoSuchElementException
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 trait Experiment {
-  def execute(config: Configuration)(implicit spark: SparkSession): Metrics
+  def execute()(implicit spark: SparkSession): Metrics
 }
 
 object Experiment {
 
-  def from(name: String): Experiment = {
+  def from(name: String, dataset: String): Experiment = {
     name match {
-      case "epileptic-seizure-recognition" => EpilepticSeizureRecognition
+      case "epileptic-seizure-recognition" => new EpilepticSeizureRecognition(dataset)
       case _                               => throw new NoSuchElementException
     }
   }
+}
+
+trait Metrics {
+  def createDF()(implicit spark: SparkSession): DataFrame
 }

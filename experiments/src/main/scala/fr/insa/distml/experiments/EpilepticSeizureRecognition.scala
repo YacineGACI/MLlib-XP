@@ -1,6 +1,5 @@
 package fr.insa.distml.experiments
 
-
 import org.apache.spark.ml.classification.DecisionTreeClassifier
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.VectorAssembler
@@ -10,10 +9,11 @@ object EpilepticSeizureRecognition extends Experiment {
 
   def execute(config: Configuration)(implicit spark: SparkSession): Metrics = {
 
-    val raw = spark.read.format("csv")
-      .option("sep",         ",")
+    val raw = spark.read
+      .format("csv")
+      .option("sep", ",")
       .option("inferSchema", "true")
-      .option("header",      "true")
+      .option("header", "true")
       .load(config.dataset)
 
     val assembler = new VectorAssembler()

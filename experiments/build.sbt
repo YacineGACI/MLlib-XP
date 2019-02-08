@@ -6,6 +6,10 @@ version := "0.1"
 
 scalaVersion := "2.11.12"
 
+scapegoatVersion in ThisBuild := "1.1.0"
+
+//wartremoverWarnings ++= Warts.all
+
 val sparkVersion = "2.4.0"
 val log4jVersion = "2.11.1"
 val scoptVersion = "3.7.1"
@@ -22,7 +26,6 @@ libraryDependencies ++= Seq(
 excludeDependencies ++= Seq(
   ExclusionRule(organization = "org.glassfish.hk2.external")
 )
-
 
 assemblyMergeStrategy in assembly := {
   case PathList("org", "apache", xs @ _*) => MergeStrategy.last

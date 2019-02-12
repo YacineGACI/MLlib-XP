@@ -1,0 +1,37 @@
+experiment:
+  metrics:
+    applicative:
+      enable: true
+    spark:
+      enable: true
+      select: *
+      #drop:
+  results:
+    location: ./results/
+    format: csv
+  #cluster:
+  #  nodes: 3
+  datasets:
+    - name: epileptic-seizure-recognition
+      #type: classification
+      #with: [decision-tree]
+      reader:
+        class: fr.insa.distml.EpilepticSeizureRecognitionReader
+        #format: csv
+        location: ./datasets/epileptic-seizure-recognition
+      transformer:
+        class: fr.insa.distml.EpilepticSeizureRecognitionTransformer
+        #categoricals: []
+  algorithms:
+    runs: 5
+    parameters:
+      train-ratio:
+        default: 0.8
+    list:
+      - name: decision-tree
+        #type: classification
+        class: org.apache.spark.ml.classification.DecisionTreeClassifier
+        parameters:
+          max-depth:
+            #default:
+            values: [10, 20, 30]

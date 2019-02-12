@@ -1,6 +1,9 @@
 .idea/
 .vscode/
 target/
-metrics/
-dataset/*/**
-!dataset/*/.gitkeep
+results/**
+!results/.gitkeep
+images/**
+!images/.gitkeep
+datasets/*/**
+!datasets/*/.gitkeep

@@ -1,4 +1,4 @@
-package fr.insa.distml.experiments
+package fr.insa.distml.experiment
 
 import org.apache.spark.ml.classification.DecisionTreeClassifier
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
@@ -45,6 +45,7 @@ class EpilepticSeizureRecognition(dataset: String) extends Experiment {
 }
 
 case class EpilepticSeizureRecognitionMetrics(f1: Double) extends Metrics {
+
   override def createDF()(implicit spark: SparkSession): DataFrame = {
     import spark.implicits._
     Seq(this).toDF

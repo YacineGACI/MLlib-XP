@@ -1,37 +1,61 @@
-experiment:
+experiments:
   metrics:
     applicative:
       enable: true
     spark:
       enable: true
       select: *
-      #drop:
+      # drop:
   results:
     location: ./results/
     format: csv
-  #cluster:
-  #  nodes: 3
+  # cluster:
+  #   nodes: 3
+  spark:
+    spark.driver.cores: 2
+  execution:
+    runs: 5
+    discard-first: true
   datasets:
     - name: epileptic-seizure-recognition
-      #type: classification
-      #with: [decision-tree]
+      types: [classification, clustering]
       reader:
-        class: fr.insa.distml.EpilepticSeizureRecognitionReader
-        #format: csv
+        format: csv or # class: fr.insa.distml.reader.LightSVMReader
         location: ./datasets/epileptic-seizure-recognition
-      transformer:
-        class: fr.insa.distml.EpilepticSeizureRecognitionTransformer
-        #categoricals: []
+        options:
+          sep: ,
+          header: true
+          infer-schema: true
+      transformers:
+        - class: fr.insa.distml.transformer.VectorAssemblerRegex # should also work with org.apache.spark.ml.feature.VectorAssembler and input-cols: [X1, ... X178]
+          parameters:
+            stable:
+              input-cols-regex: X*
+              output-col: features
+        - class: fr.insa.distml.transformer.ColumnRenamer
+          parameters:
+            stable:
+              input-col: y
+              output-col: label
   algorithms:
-    runs: 5
-    parameters:
-      train-ratio:
-        default: 0.8
-    list:
-      - name: decision-tree
-        #type: classification
+    - name: decision-tree
+      types: [classification]
+      estimator:
         class: org.apache.spark.ml.classification.DecisionTreeClassifier
         parameters:
-          max-depth:
-            #default:
-            values: [10, 20, 30]
+          variable:
+            max-depth: [10, 20, 30]
+      splitter:
+        class: fr.insa.distml.processors.TrainTestSplitter
+          parameters:
+            stable:
+              ratio: 0.8
+      transformers:
+  evaluations:
+    - name: multiclass
+      types: [classification]
+      evaluator:
+        class: org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+        parameters:
+          variable:
+            metric: [f1, weightedPrecision, weightedRecall, accuracy]

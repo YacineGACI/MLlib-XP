@@ -1,4 +1,4 @@
-package fr.insa.distml.experiments
+package fr.insa.distml.experiment
 
 import java.util.NoSuchElementException
 import org.apache.spark.sql.{DataFrame, SparkSession}

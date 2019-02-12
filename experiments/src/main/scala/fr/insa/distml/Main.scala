@@ -1,6 +1,6 @@
 package fr.insa.distml
 
-import fr.insa.distml.experiments.Experiment
+import fr.insa.distml.experiment.Experiment
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import scopt.OptionParser
 import ch.cern.sparkmeasure.StageMetrics
@@ -42,23 +42,11 @@ object Main {
   def main(args: Array[String]): Unit = {
 
     val parser = new OptionParser[Params]("DistML") {
-      opt[String]("dataset")
+      opt[String]("config")
         .required()
         .valueName("<file>")
-        .action((value, params) => params.copy(dataset = value))
-        .text("path to the dataset file")
-
-      opt[String]("experiment")
-        .required()
-        .valueName("<name>")
-        .action((value, params) => params.copy(experiment = value))
-        .text("name of the experiment to launch")
-
-      opt[String]("metrics")
-        .optional()
-        .valueName("<dir>")
-        .action((value, params) => params.copy(metrics = value.replaceAll("/$", "")))
-        .text("path to the metrics directory")
+        .action((value, params) => params.copy(config = value))
+        .text("path to the config file")
 
       opt[Unit]("local")
         .optional()
@@ -73,9 +61,7 @@ object Main {
   }
 
   case class Params(
-       dataset: String  = ".",
-         local: Boolean = false,
-    experiment: String  = "",
-       metrics: String  = ""
+    config: String  = ".",
+     local: Boolean = false
   )
 }

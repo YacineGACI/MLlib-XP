@@ -1,5 +1,6 @@
 package fr.insa.distml.experiment
 
+import fr.insa.distml.metrics.{ApplicationMetrics, Metrics}
 import org.apache.spark.ml.classification.DecisionTreeClassifier
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature.VectorAssembler
@@ -40,11 +41,11 @@ class EpilepticSeizureRecognition(dataset: String) extends Experiment {
 
     val f1 = evaluator.evaluate(predictions)
 
-    EpilepticSeizureRecognitionMetrics(f1 = f1)
+    EpilepticSeizureRecognitionMetrics(trainingTime = 0, f1 = f1)
   }
 }
 
-case class EpilepticSeizureRecognitionMetrics(f1: Double) extends Metrics {
+case class EpilepticSeizureRecognitionMetrics(trainingTime: Long, f1: Double) extends ApplicationMetrics {
 
   override def createDF()(implicit spark: SparkSession): DataFrame = {
     import spark.implicits._

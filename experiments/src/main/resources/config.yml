@@ -4,7 +4,7 @@ experiments:
       enable: true
     spark:
       enable: true
-      select: *
+      select: '*'
       # drop:
   results:
     location: ./results/
@@ -12,50 +12,48 @@ experiments:
   # cluster:
   #   nodes: 3
   spark:
-    spark.driver.cores: 2
+    spark.driver.cores: '2'
   execution:
     runs: 5
-    discard-first: true
-  datasets:
+    # discard-first: true
+  load:
     - name: epileptic-seizure-recognition
-      types: [classification, clustering]
+      dtypes: [classification, clustering]
       reader:
-        format: csv or # class: fr.insa.distml.reader.LightSVMReader
+        format: csv # or classname: fr.insa.distml.reader.LightSVMReader
         location: ./datasets/epileptic-seizure-recognition
         options:
-          sep: ,
+          sep: ','
           header: true
-          infer-schema: true
+          inferSchema: true
       transformers:
-        - class: fr.insa.distml.transformer.VectorAssemblerRegex # should also work with org.apache.spark.ml.feature.VectorAssembler and input-cols: [X1, ... X178]
+        - classname: fr.insa.distml.transformer.VectorAssemblerRegex # should work with org.apache.spark.ml.feature.VectorAssembler and input-cols: [X1, ... X178]
           parameters:
             stable:
-              input-cols-regex: X*
-              output-col: features
-        - class: fr.insa.distml.transformer.ColumnRenamer
+              inputColsRegex: 'X*'
+              outputCol: features
+        - classname: fr.insa.distml.transformer.ColumnRenamer
           parameters:
             stable:
-              input-col: y
-              output-col: label
-  algorithms:
-    - name: decision-tree
-      types: [classification]
+              inputCol: y
+              outputCol: label
+  split:
+    parameters:
+      stable:
+        ratio: 0.8
+  train:
+    - name: decision-tree-classifier
+      dtype: classification
       estimator:
-        class: org.apache.spark.ml.classification.DecisionTreeClassifier
+        classname: org.apache.spark.ml.classification.DecisionTreeClassifier
         parameters:
           variable:
-            max-depth: [10, 20, 30]
-      splitter:
-        class: fr.insa.distml.processors.TrainTestSplitter
-          parameters:
-            stable:
-              ratio: 0.8
-      transformers:
-  evaluations:
-    - name: multiclass
-      types: [classification]
+            maxDepth: [10, 20, 30]
+  evaluate:
+    - name: multiclass-classification-evaluator
+      dtype: classification
       evaluator:
-        class: org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+        classname: org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
         parameters:
           variable:
             metric: [f1, weightedPrecision, weightedRecall, accuracy]

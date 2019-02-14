@@ -1,59 +1,28 @@
 experiments:
   metrics:
+    location: ./results/
+    format: csv
     applicative:
       enable: true
     spark:
       enable: true
-      select: '*'
-      # drop:
-  results:
-    location: ./results/
-    format: csv
-  # cluster:
-  #   nodes: 3
-  spark:
-    spark.driver.cores: '2'
   execution:
     runs: 5
-    # discard-first: true
-  load:
-    - name: epileptic-seizure-recognition
-      dtypes: [classification, clustering]
+  datasets:
+    - dtypes: [classification, clustering]
       reader:
-        format: csv # or classname: fr.insa.distml.reader.LightSVMReader
-        location: ./datasets/epileptic-seizure-recognition
-        options:
-          sep: ','
-          header: true
-          inferSchema: true
-      transformers:
-        - classname: fr.insa.distml.transformer.VectorAssemblerRegex # should work with org.apache.spark.ml.feature.VectorAssembler and input-cols: [X1, ... X178]
-          parameters:
-            stable:
-              inputColsRegex: 'X*'
-              outputCol: features
-        - classname: fr.insa.distml.transformer.ColumnRenamer
-          parameters:
-            stable:
-              inputCol: y
-              outputCol: label
+        classname: fr.insa.distml.reader.EpilepticSeizureRecognitionReader
+        parameters:
+          location: ./datasets/epileptic-seizure-recognition
   split:
-    parameters:
-      stable:
-        ratio: 0.8
-  train:
-    - name: decision-tree-classifier
-      dtype: classification
+    ratio: 0.8
+  algorithms:
+    - dtype: classification
       estimator:
         classname: org.apache.spark.ml.classification.DecisionTreeClassifier
         parameters:
-          variable:
-            maxDepth: [10, 20, 30]
-  evaluate:
-    - name: multiclass-classification-evaluator
-      dtype: classification
+          maxDepth: [10, 20, 30]
       evaluator:
         classname: org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
         parameters:
-          variable:
-            metric: [f1, weightedPrecision, weightedRecall, accuracy]
+          metric: [f1, weightedPrecision, weightedRecall, accuracy]

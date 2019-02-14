@@ -1,18 +1,96 @@
 package fr.insa.distml
 
 import scopt.OptionParser
+
 import scala.io.Source
 import io.circe.yaml.{parser => YamlParser}
 import io.circe._
 import cats.syntax.either._
+import ch.cern.sparkmeasure.StageMetrics
+import fr.insa.distml.experiment.Experiment
+import fr.insa.distml.reader.Reader
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.auto._
+import org.apache.spark.ml.Estimator
+import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import scala.collection.immutable.Map
 
 
 object Main {
 
-  def performExperiments(conf: Conf): Unit = {
-    println(conf)
+  def save(df: DataFrame, file: String, format: String): Unit = {
+    df.coalesce(1).write.format(format).save(file)
+  }
+
+  def generateParameterizedInstance[T](classname: String, parameter: Map[String, Object]): T = {
+    val o = Class.forName(classname).newInstance()
+    for((name, value) <- parameter) {
+      o.getClass.getMethod("setMaxDepth").invoke(5)
+    }
+  }
+
+  def generateParameters(grid: Map[String, List[Object]]): Seq[Map[String, Object]] = {
+
+    if(grid.isEmpty) {
+      return Seq.empty
+    }
+
+    val (name, values) = grid.head
+
+    val untreated = grid.filterKeys(key => name != key)
+
+    val parameters = generateParameters(untreated)
+
+    parameters.flatMap(parameter => for(value <- values) yield parameter + (name -> value))
+  }
+
+  def generateExperiments(datasets: List[DatasetConf], algorithms: List[AlgorithmConf], split: SplitConf): Seq[Experiment] = {
+
+    for(dataset <- datasets; algorithm <- algorithms if dataset.dtypes.contains(algorithm.dtype)) {
+
+      val    readerParameters = generateParameters(     dataset.reader.parameters)
+      val estimatorParameters = generateParameters(algorithm.estimator.parameters)
+      val evaluatorParameters = generateParameters(algorithm.evaluator.parameters)
+
+      for(readerParameter <- readerParameters; estimatorParameter <- estimatorParameters; evaluatorParameter <- evaluatorParameters) {
+
+        val reader    = Class.forName(     dataset.reader.classname).newInstance().asInstanceOf[Reader]
+        val estimator = Class.forName(algorithm.estimator.classname).newInstance().asInstanceOf[Estimator]
+        val evaluator = Class.forName(algorithm.evaluator.classname).newInstance().asInstanceOf[Evaluator]
+
+
+      }
+    }
+  }
+
+  def performExperiments(conf: ExperimentsConf): Unit = {
+
+    val experiments = generateExperiments(conf.datasets, conf.algorithms, conf.split)
+
+    val location = conf.metrics.location
+    val format   = conf.metrics.format
+
+    for(experiment <- experiments) {
+
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+
+      implicit val spark: SparkSession = SparkSession.builder().getOrCreate()
+
+      val sparkMetrics = StageMetrics(spark)
+
+      sparkMetrics.begin()
+
+      val appMetrics = experiment.execute()
+
+      sparkMetrics.end()
+
+      save(sparkMetrics.createStageMetricsDF(), s"$location/spark-metrics", format)
+      save(  appMetrics.createAppMetricsDF(),   s"$location/app-metrics",   format)
+
+      spark.stop()
+    }
   }
 
   def main(args: Array[String]): Unit = {
@@ -43,7 +121,7 @@ object Main {
           .flatMap(_.as[Conf])
           .valueOr(throw _)
 
-        performExperiments(conf)
+        performExperiments(conf.experiments)
       }
     }
   }
@@ -53,38 +131,30 @@ object Main {
   case class Conf(experiments: ExperimentsConf)
 
   case class ExperimentsConf(
-        spark: Map[String, String] = Map.empty,
-      metrics:       MetricsConf = MetricsConf(),
-      results:       ResultsConf = ResultsConf(),
-    execution:     ExecutionConf = ExecutionConf(),
-        split:  Option[SplitConf],
-         load: List[    LoadConf] = List.empty,
-        train: List[   TrainConf] = List.empty,
-     evaluate: List[EvaluateConf] = List.empty
+       metrics:        MetricsConf  =   MetricsConf(),
+     execution:      ExecutionConf  = ExecutionConf(),
+         split:          SplitConf  =     SplitConf(),
+      datasets:   List[DatasetConf],
+    algorithms: List[AlgorithmConf]
   )
 
-  case class MetricsConf(applicative: AppMetricsConf = AppMetricsConf(), spark: SparkMetricsConf = SparkMetricsConf())
+  case class MetricsConf(
+    location: String = "./results/",
+      format: String = "csv",
+    applicative:   AppMetricsConf =   AppMetricsConf(),
+          spark: SparkMetricsConf = SparkMetricsConf()
+  )
   case class   AppMetricsConf(enable: Boolean = true)
   case class SparkMetricsConf(enable: Boolean = true, select: String = "*")
 
-  case class ResultsConf(location: String = "./results/", format: String = "csv")
-
   case class ExecutionConf(runs: Int = 1)
 
-  case class     LoadConf(name: String, dtypes: List[String], transformers: List[TransformerConf] = List.empty, reader: ReaderConf)
-  case class    TrainConf(name: String, dtype: String,           estimator:        EstimatorConf)
-  case class EvaluateConf(name: String, dtype: String,           evaluator:        EvaluatorConf)
+  case class   DatasetConf(dtypes: List[String],   reader:    ReaderConf)
+  case class AlgorithmConf(dtype:       String, estimator: EstimatorConf, evaluator: EvaluatorConf)
 
-  case class ParametersConf(
-       stable: Map[String,      Json]  = Map.empty,
-     variable: Map[String, List[Json]] = Map.empty
-   )
+  case class EstimatorConf(classname: String, parameters: Map[String, List[Json]] = Map.empty)
+  case class EvaluatorConf(classname: String, parameters: Map[String, List[Json]] = Map.empty)
+  case class    ReaderConf(classname: String, parameters: Map[String, List[Json]] = Map.empty)
 
-  case class       SplitConf(                   parameters: ParametersConf = ParametersConf())
-
-  case class TransformerConf(classname: String, parameters: ParametersConf = ParametersConf())
-  case class   EstimatorConf(classname: String, parameters: ParametersConf = ParametersConf())
-  case class   EvaluatorConf(classname: String, parameters: ParametersConf = ParametersConf())
-
-  case class      ReaderConf(classname: Option[String] = None, options: Map[String, Json] = Map.empty, format: Option[String] = None, location: String)
+  case class SplitConf(ratio: Double = 0.8)
 }

@@ -43,7 +43,55 @@ class EpilepticSeizureRecognition(dataset: String) extends Experiment {
 
     EpilepticSeizureRecognitionMetrics(trainingTime = 0, f1 = f1)
   }
+
+  def performExperiments(conf: Conf): Unit = {
+
+    for(dataset <- conf.experiments.datasets; algorithm <- conf.experiments.algorithms if dataset.dtypes.contains(algorithm.dtype)) {
+
+      val reader    = Class.forName(     dataset.reader.classname).newInstance().asInstanceOf[Reader]
+      val estimator = Class.forName(algorithm.estimator.classname).newInstance().asInstanceOf[Estimator]
+
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+
+      implicit val spark: SparkSession = SparkSession.builder().getOrCreate()
+
+      val stageMetrics = StageMetrics(spark)
+
+      stageMetrics.begin()
+
+      val data = reader.read()
+
+      val Array(train, test) = algorithm.dtype match {
+        case "classification" => data.randomSplit(Array(conf.experiments.split.ratio, 1 - conf.experiments.split.ratio))
+        case _                => Array(data, data)
+      }
+
+      val model = estimator.fit(train)
+
+      val predictions = model.transform(test)
+
+      stageMetrics.end()
+
+      val evaluator = Class.forName(algorithm.evaluator.classname).newInstance().asInstanceOf[Evaluator]
+      evaluator.getClass.getMethod("setFeaturesCol").invoke("features")
+      evaluator.getClass.getMethod("setPredictionCol").invoke("prediction")
+      evaluator.getClass.getMethod("setLabelCol").invoke("label")
+
+      val appMetrics = evaluator.evaluate(predictions)
+
+      val format = conf.experiments.metrics.format
+      val location = conf.experiments.metrics.location
+
+      save(stageMetrics.createStageMetricsDF(), s"$location/spark-metrics", format)
+      save(  appMetrics.createAppMetricsDF(),   s"$location/app-metrics",   format)
+
+      spark.stop()
+    }
+  }
 }
+
+
 
 case class EpilepticSeizureRecognitionMetrics(trainingTime: Long, f1: Double) extends ApplicationMetrics {
 

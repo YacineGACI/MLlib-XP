@@ -1,0 +1,67 @@
+{
+  "metrics": {
+    "writer": {
+      "classname": "fr.insa.distml.writer.SparkWriter",
+      "parameters": {
+        "location": "./metrics/spark-metrics",
+        "format": "csv",
+        "coalesce": 1,
+        "options": {
+          "sep": ",",
+          "header": true
+        }
+      }
+    },
+    "applicative": true,
+    "spark": true
+  },
+  "dataset": {
+    "reader": {
+      "classname": "fr.insa.distml.reader.SparkReader",
+      "parameters": {
+        "format": "csv",
+        "location": "./datasets/epileptic-seizure-recognition/data.csv",
+        "options": {
+          "sep": ",",
+          "inferSchema": true,
+          "header": true
+        }
+      }
+    },
+    "transformers": [
+      {
+        "classname": "fr.insa.distml.transformer.EpilepticSeizureRecognitionTransformer",
+        "parameters": {
+        }
+      }
+    ],
+    "splitter": {
+      "classname": "fr.insa.distml.splitter.TrainTestSplitter",
+      "parameters": {
+        "ratio": 0.8
+      }
+    }
+  },
+  "algorithm": {
+    "estimator": {
+      "classname": "org.apache.spark.ml.classification.DecisionTreeClassifier",
+      "parameters": {
+        "maxDepth": 10
+      }
+    },
+    "evaluators": [
+      {
+        "classname": "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator",
+        "parameters": {
+          "metricName": "f1"
+        }
+      },
+      {
+        "classname": "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator",
+        "parameters": {
+          "metricName": "accuracy"
+        }
+      }
+    ]
+  }
+}

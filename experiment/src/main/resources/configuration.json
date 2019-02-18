@@ -1,19 +1,31 @@
 {
   "metrics": {
-    "writer": {
-      "classname": "fr.insa.distml.writer.SparkWriter",
-      "parameters": {
-        "location": "./metrics/spark-metrics",
-        "format": "csv",
-        "coalesce": 1,
-        "options": {
-          "sep": ",",
-          "header": true
+    "applicative": {
+      "writer": {
+        "classname": "fr.insa.distml.writer.SparkWriter",
+        "parameters": {
+          "location": "./metrics/app-metrics.csv",
+          "format": "csv",
+          "coalesce": 1,
+          "options": {
+            "header": true
+          }
         }
       }
     },
-    "applicative": true,
-    "spark": true
+    "spark": {
+      "writer": {
+        "classname": "fr.insa.distml.writer.SparkWriter",
+        "parameters": {
+          "location": "./metrics/spark-metrics.csv",
+          "format": "csv",
+          "coalesce": 1,
+          "options": {
+            "header": true
+          }
+        }
+      }
+    }
   },
   "dataset": {
     "reader": {
@@ -36,9 +48,9 @@
       }
     ],
     "splitter": {
-      "classname": "fr.insa.distml.splitter.TrainTestSplitter",
+      "classname": "fr.insa.distml.splitter.RandomSplitter",
       "parameters": {
-        "ratio": 0.8
+        "weights": [0.8, 0.2]
       }
     }
   },
@@ -51,12 +63,14 @@
     },
     "evaluators": [
       {
+        "name": "f1",
         "classname": "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator",
         "parameters": {
           "metricName": "f1"
         }
       },
       {
+        "name": "accuracy",
         "classname": "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator",
         "parameters": {
           "metricName": "accuracy"

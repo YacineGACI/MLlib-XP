@@ -12,15 +12,15 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    val parser = new OptionParser[Parameters]("DistML") {
+    val parser = new OptionParser[Arguments]("DistML") {
       opt[String]("config")
         .required()
         .valueName("<file|json>")
         .action((value, parameters) => parameters.copy(config = value))
-        .text("the configuration or the path to the configuration file formatted in json")
+        .text("The configuration in json or the path to the configuration file")
     }
 
-    parser.parse(args, Parameters("")) match {
+    parser.parse(args, Arguments("")) match {
       case None             => Unit
       case Some(parameters) =>
         val json = Path(parameters.config)
@@ -34,45 +34,36 @@ object Main {
     }
   }
 
-  case class Parameters(config: String)
+  case class Arguments(config: String)
 
   implicit val anyRead: Reads[Any] = new Reads[Any] {
 
     def toAny(json: JsValue): JsResult[Any] = {
       json match {
+        case JsNumber(value) => JsSuccess(
+          if(value.isValidInt) value.toIntExact
+          else                 value.doubleValue
+        )
         case JsBoolean(bool) => JsSuccess(bool)
-        case JsNumber(value) => JsSuccess(if(value.isValidInt) value.toIntExact else value.doubleValue)
         case JsString(value) => JsSuccess(value)
-        case _               => JsError("Can't convert to type Any")
+        case _               => JsError("Type must be Int|Double|Boolean|String")
       }
     }
 
     override def reads(json: JsValue): JsResult[Any] = {
-
       json match {
-
         case JsArray(values)  =>
-          val (allErrors, anyValues) = values.map(toAny).toList.partition(_.isError)
-          if (allErrors.isEmpty) {
-            JsSuccess(anyValues.map(_.get))
-          } else {
-            allErrors.headOption match {
-              case Some(errors) => errors
-              case None         => throw new NoSuchElementException
-            }
+          val (errors, any) = values.map(toAny).toArray.partition(_.isError)
+          errors.headOption match {
+            case Some(err) => err
+            case None      => JsSuccess(any.map(_.get))
           }
-
         case JsObject(values) =>
-          val (allErrors, anyValues) = values.mapValues(toAny).partition(_._2.isError)
-          if (allErrors.isEmpty) {
-            JsSuccess(anyValues.mapValues(_.get).toMap)
-          } else {
-            allErrors.headOption match {
-              case Some(errors) => errors._2
-              case None         => throw new NoSuchElementException
-            }
+          val (errors, any) = values.mapValues(toAny).toMap.partition(_._2.isError)
+          errors.headOption match {
+            case Some(err) => err._2
+            case None      => JsSuccess(any.mapValues(_.get))
           }
-
         case value            => toAny(value)
       }
     }
@@ -80,7 +71,8 @@ object Main {
 
   implicit val classConfigurationReads: Reads[ClassConfiguration] = (
     (JsPath \ "classname" ).read[String] and
-    (JsPath \ "parameters").read[Map[String, Any]]
+    (JsPath \ "parameters").read[Map[String, Any]] and
+    (JsPath \ "name").readNullable[String]
   )(ClassConfiguration.apply _)
 
   implicit val datasetConfigurationReads: Reads[DatasetConfiguration] = (
@@ -94,10 +86,13 @@ object Main {
     (JsPath \ "evaluators").read[Seq[ClassConfiguration]]
   )(AlgorithmConfiguration.apply _)
 
+  implicit val metricConfigurationReads: Reads[MetricConfiguration] =
+    (JsPath \ "writer").read[ClassConfiguration]
+      .map(MetricConfiguration)
+
   implicit val metricsConfigurationReads: Reads[MetricsConfiguration] = (
-    (JsPath \ "writer"     ).read[ClassConfiguration] and
-    (JsPath \ "applicative").read[Boolean]            and
-    (JsPath \ "spark"      ).read[Boolean]
+    (JsPath \ "applicative").readNullable[MetricConfiguration] and
+    (JsPath \ "spark"      ).readNullable[MetricConfiguration]
   )(MetricsConfiguration.apply _)
 
   implicit val experimentConfigurationReads: Reads[ExperimentConfiguration] = (

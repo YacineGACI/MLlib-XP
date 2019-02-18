@@ -8,6 +8,11 @@ scalaVersion := "2.11.12"
 
 scapegoatVersion := "1.1.0"
 
+scalacOptions ++= Seq(
+  "-deprecation",
+  "-feature"
+)
+
 // wartremoverWarnings ++= Warts.all
 
 val        sparkVersion = "2.4.0"

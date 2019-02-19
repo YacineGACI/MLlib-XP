@@ -47,17 +47,15 @@ object Main {
   /*
   * Classes are configured after instantiation by calling setter methods with the value specified in the 'parameters' field.
   * ClassConfiguration(Map("org.apache.spark.ml.classification.DecisionTreeClassifier", "maxDepth" -> 2)) will translate into new DecisionTreeClassifier().setMaxDepth(2).
-  * We accept any type, but we can only deserialize the Json into Int|Double|Boolean|String|Array[_]|Map[String, _].
-  * We do not support setter methods with more than one argument since we use a Map[String, Any] instead of a Map[String, List[Any]]
+  * We can only deserialize the Json into Int | Double | Boolean | String | Array[Int] | Array[Double] | Array[Boolean] | Array[String] | Map[String, _].
   * */
   implicit val anyRead: Reads[Any] = new Reads[Any] {
 
     def toAny(json: JsValue): JsResult[Any] = {
       json match {
-        case JsNumber(value) => JsSuccess(
-          if(value.isValidInt) value.toIntExact
-          else                 value.doubleValue
-        )
+        case JsNumber(value) =>
+          if(value.isValidInt)  JsSuccess(value.toIntExact)
+          else                  JsSuccess(value.doubleValue)
         case JsBoolean(bool) => JsSuccess(bool)
         case JsString(value) => JsSuccess(value)
         case _               => JsError("Type must be Int|Double|Boolean|String")

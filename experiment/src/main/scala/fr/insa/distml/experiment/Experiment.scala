@@ -9,7 +9,6 @@ import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.sql.SparkSession
 import scala.collection.immutable._
 import scala.reflect.ClassTag
-import scala.util.{Try, Success, Failure}
 
 object Experiment {
 
@@ -19,76 +18,67 @@ object Experiment {
   private def asInstanceOfOption[T: ClassTag](o: Any): Option[T] = Some(o) collect { case m: T => m }
 
   /*
-  * Cast an array of type Array[_] to an array of type Array[T] along with its contents.
-  * */
-  private def castArray[T: ClassTag](array: Array[_]): Array[T] = {
-    array.map(asInstanceOfOption[T]).map(_.getOrElse(throw new IllegalArgumentException("Failed to cast Array content")))
-  }
-
-  /*
   * Create a new parameterized instance of a class by calling its setter methods after instantiation.
+  * We do not support setter methods with more than one argument since we use a Map[String, Any] instead of a Map[String, Array[Any]].
+  * We do not support setter methods which take a boxed AnyVal (java.lang.Integer).
   * */
   private def newParameterizedInstance[C: ClassTag](classname: String, parameters: Map[String, Any]): C = {
 
     // Create new instance
-    val obj = asInstanceOfOption[C](Class.forName(classname)
-      .getConstructor().newInstance())
-      .getOrElse(throw new IllegalArgumentException("Invalid class type"))
-
-    parameters.get("coalesce").map(_.getClass).foreach(println)
-    println(parameters)
+    val obj = asInstanceOfOption[C](
+      Class.forName(classname).getConstructor().newInstance()
+    ).getOrElse(throw new IllegalArgumentException("Invalid class type"))
 
     for((key, value) <- parameters) {
 
-      // Conversion from Scala types to Java ones to find and match the corresponding setter method
-      val (param: AnyRef, cls: Class[Any]) = value match {
-
-        case o: java.lang.Integer => (o, classOf[Int    ])
-        case o: java.lang.Double  => (o, classOf[Double ])
-        case o: java.lang.Boolean => (o, classOf[Boolean])
-        case o: java.lang.String  => (o, classOf[String ])
-        case o: Array[_]          =>
-
-          /*
-          * We try to convert arrays of type Array[_] into arrays of type Array[T] with T being the type of the first element.
-          * If it failed, we fallback on the default Array[_] type.
-          * This step is necessary because the type Array[_] in Scala is translated into List[Object] in Java, but the type Array[Int] is translated into int[].
-          * */
-
-          def convert[T: ClassTag](obj: Array[_]): (Any, Class[_]) = {
-            Try(castArray[T](obj)) match {
-              case Success(array) =>
-                val a = (array, classOf[Array[T]])
-                val d = array.getClass
-                a
-              case Failure(_)     => (obj,   classOf[Array[_]])
-            }
-          }
-
-          o.headOption match {
-            case Some(_: java.lang.Integer) => convert[Int    ](o)
-            case Some(_: java.lang.Double)  => convert[Double ](o)
-            case Some(_: java.lang.Boolean) => convert[Boolean](o)
-            case Some(_: java.lang.String)  => convert[String ](o)
-            case _                => (o, classOf[Array[_]])
-          }
-
-        case o: Map[_, _]         => (o, classOf[Map[_, _]])
-        case o                    => (o, o.getClass)
+      // Un-boxing Java Object to Scala AnyVal
+      val cls = value match {
+        case _: java.lang.Integer => classOf[Int]
+        case _: java.lang.Double  => classOf[Double]
+        case _: java.lang.Boolean => classOf[Boolean]
+        case _: Map[_, _]         => classOf[Map[_, _]] // To interpret a Map$Map1 type as a Map type
+        case o                    => o.getClass
       }
 
-      // Invoke setter methods to configure the instance
-      obj.getClass.getMethod("set" + key.capitalize, cls).invoke(obj, param)
+      // Invoke setter method to configure the instance
+      val method = obj.getClass.getMethod("set" + key.capitalize, Array[Class[_]](cls):_*)
+      method.invoke(obj, Array[AnyRef](asInstanceOfOption[AnyRef](value).getOrElse(throw new RuntimeException)):_*) // Auto-boxing AnyVal to AnyRef (Object)
     }
 
     obj
   }
 
   /*
+  * Cast an array of type Array[_] to an array of type Array[T] along with its contents.
+  * */
+  private def castArray[T: ClassTag](array: Array[_]): Array[T] = {
+    array.map(asInstanceOfOption[T]).map(_.getOrElse(throw new IllegalArgumentException("Failed to cast array content")))
+  }
+
+  /*
+  * Cast a parameter of type Any to a compatible Java type for setter methods.
+  * This method is primarily used to cast Object[] arrays to int[] arrays (or the corresponding type of the first element, thus array must not be empty).
+  * This is due to the fact that Json arrays can contain anything when parsing.
+  * */
+  private def castParameter(parameter: Any): Any = {
+    parameter match {
+      case o: Array[_] =>
+        o.headOption match {
+          case Some(_: java.lang.Integer) => castArray[Int    ](o)
+          case Some(_: java.lang.Double)  => castArray[Double ](o)
+          case Some(_: java.lang.Boolean) => castArray[Boolean](o)
+          case Some(_)                    => o
+          case None                       => throw new IllegalArgumentException("Array must not be empty to infer type")
+        }
+      case o           => o
+    }
+  }
+
+  /*
   * Create a new parameterized instance from a class configuration.
   * */
   private def fromClassConfiguration[C: ClassTag](config: ClassConfiguration): C = {
-    newParameterizedInstance[C](config.classname, config.parameters)
+    newParameterizedInstance[C](config.classname, config.parameters.mapValues(castParameter))
   }
 
   /*
@@ -124,7 +114,7 @@ object Experiment {
     // Create a fresh Spark session
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
-    implicit val spark: SparkSession = SparkSession.builder().master("local[*]").getOrCreate()
+    implicit val spark: SparkSession = SparkSession.builder().getOrCreate()
 
     // Start collect of Spark metrics if enabled
     val sparkMetrics = sparkWriter.map(_ => TaskMetrics(spark))
@@ -139,7 +129,7 @@ object Experiment {
     val Array(train, test) = splitter.map(_.split(data)).getOrElse(Array(data, data))
 
     // Fit on train data and transform test data
-    val (model, fitTime) = time { learning.fit(train) }
+    val (      model,       fitTime) = time { learning.fit(train) }
     val (predictions, transformTime) = time { model.transform(test) }
 
     // Stop collect of Spark metrics if enabled

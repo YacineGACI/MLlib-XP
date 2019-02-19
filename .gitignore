@@ -1,8 +1,8 @@
 .idea/
 .vscode/
 target/
-results/**
-!results/.gitkeep
+metrics/**
+!metrics/.gitkeep
 images/**
 !images/.gitkeep
 datasets/*/**

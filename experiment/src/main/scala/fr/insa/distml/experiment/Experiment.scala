@@ -7,6 +7,7 @@ import fr.insa.distml.writer.Writer
 import org.apache.spark.ml.{Estimator, Pipeline, PipelineStage, Transformer}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.storage.StorageLevel
 import scala.collection.immutable._
 import scala.reflect.ClassTag
 
@@ -83,7 +84,47 @@ object Experiment {
   }
 
   /*
-  * Surround a call-by-name block of code with a timer.
+  * Create a new experiment based on the specified configuration for this run.
+  * */
+  def from(conf: ExperimentConfiguration): Experiment = {
+
+    // Create beans to be used in the experiment.
+    val appliWriter  = conf.metrics.appli.map(_.writer).map(fromClassConfiguration[Writer])
+    val sparkWriter  = conf.metrics.spark.map(_.writer).map(fromClassConfiguration[Writer])
+
+    val reader       = fromClassConfiguration[Reader](conf.dataset.reader)
+    val transformers = conf.dataset.transformers.map(fromClassConfiguration[Transformer])
+    val splitter     = conf.dataset.splitter.map(fromClassConfiguration[Splitter])
+
+    val estimator    = fromClassConfiguration[Estimator[_]](conf.algorithm.estimator)
+    val evaluators   = conf.algorithm.evaluators.map(cls => (
+      fromClassConfiguration[Evaluator](cls),
+      cls.name.getOrElse(throw new IllegalArgumentException("Missing name for evaluator"))
+    ))
+
+    val storageLevel =
+      asInstanceOfOption[StorageLevel](StorageLevel.getClass.getMethod(conf.spark.storageLevel)
+        .invoke(StorageLevel))
+        .getOrElse(throw new IllegalArgumentException("Bad storage level"))
+
+    // Inject beans and create a new experiment.
+    new Experiment(appliWriter, sparkWriter, reader, transformers, splitter, estimator, evaluators, storageLevel)
+  }
+}
+
+class Experiment(
+   appliWriter: Option[Writer],
+   sparkWriter: Option[Writer],
+        reader: Reader,
+  transformers: Seq[Transformer],
+      splitter: Option[Splitter],
+     estimator: Estimator[_],
+    evaluators: Seq[(Evaluator, String)],
+  storageLevel: StorageLevel
+) {
+
+  /*
+  * Time a block of code (call-by-name).
   * */
   private def time[R](block: => R): (R, Long) = {
     val start  = System.currentTimeMillis()
@@ -93,63 +134,67 @@ object Experiment {
   }
 
   /*
-  * Perform a new experiment based on the specified configuration for this run.
+  * Perform experiment.
   * */
-  def perform(conf: ExperimentConfiguration): Unit = {
+  def perform(): Unit = {
 
-    // Create beans to be used in the experiment
-    val appliWriter  = conf.metrics.appli.map(_.writer).map(fromClassConfiguration[Writer])
-    val sparkWriter  = conf.metrics.spark.map(_.writer).map(fromClassConfiguration[Writer])
-
-    val reader       = fromClassConfiguration[Reader](conf.dataset.reader)
-    val transformers = conf.dataset.transformers.map(fromClassConfiguration[Transformer])
-    val splitter     = conf.dataset.splitter.map(fromClassConfiguration[Splitter])
-
-    val estimator    = fromClassConfiguration[Estimator[_]](conf.algorithm.estimator)
-    val evaluators   = conf.algorithm.evaluators.map(cls => (fromClassConfiguration[Evaluator](cls), cls.name.getOrElse(throw new IllegalArgumentException("Missing name for evaluator"))))
-
-    // Create pipelines
+    // Create pipelines.
     val preprocessing = new Pipeline().setStages(transformers.toArray[PipelineStage])
     val learning      = new Pipeline().setStages(Array[PipelineStage](estimator))
 
-    // Create a fresh Spark session
+    // Create a fresh Spark session.
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
-    implicit val spark: SparkSession = SparkSession.builder().getOrCreate()
+    implicit val spark: SparkSession = SparkSession.builder().master("local").getOrCreate()
 
-    // Start collect of Spark metrics if enabled
-    val sparkMetrics = sparkWriter.map(_ => TaskMetrics(spark))
-    sparkMetrics.foreach(_.begin())
-
-    // Reading raw dataset and apply preprocessing pipeline on it
+    // Reading raw dataset and apply preprocessing pipeline on it.
     val raw          = reader.read()
     val preprocessor = preprocessing.fit(raw)
     val data         = preprocessor.transform(raw)
 
-    // Perform train/test split if enabled
+    // Perform train/test split if enabled.
     val Array(train, test) = splitter.map(_.split(data)).getOrElse(Array(data, data))
 
-    // Fit on train data and transform test data
-    val (      model,       fitTime) = time { learning.fit(train)   }
-    val (predictions, transformTime) = time { model.transform(test) } // TODO: See if DataFrame are lazily evaluated
+    // Persist DataFrame to avoid computation.
+    Array(train, test).foreach(_.persist(storageLevel))
 
-    // Stop collect of Spark metrics if enabled
+    // Force computation to happen before fitting the model.
+    Array(train, test).foreach(_.count())
+
+    // Start collect of Spark metrics if enabled.
+    val sparkMetrics = sparkWriter.map(_ => TaskMetrics(spark))
+    sparkMetrics.foreach(_.begin())
+
+    // Fit on train data and transform test data
+    val (  model,       fitTime) = time { learning.fit(train) }
+    val (results, transformTime) = time {
+      val predictions = model.transform(test)
+      // Force DataFrame computation for collecting metrics
+      predictions.count()
+      predictions
+    }
+
+    // Stop collect of Spark metrics if enabled.
     sparkMetrics.foreach(_.end())
 
-    // Collect applicative metrics if enabled
+    // Persist DataFrame before looping on each evaluator
+    // It wasn't called previously to ensure it doesn't impact metrics, thus we compute the DataFrame twice.
+    results.persist(storageLevel)
+
+    // Collect applicative metrics if enabled.
     val appliMetrics = appliWriter.map(_ =>
       (for((evaluator, name) <- evaluators)
-        yield         name -> evaluator.evaluate(predictions)).toMap
+        yield         name -> evaluator.evaluate(results)).toMap
         + (      "fitTime" ->       fitTime.toDouble)
         + ("transformTime" -> transformTime.toDouble)
     )
 
-    // Save metrics
+    // Save metrics.
     import spark.implicits._
     sparkMetrics.foreach(metrics => sparkWriter.foreach(_.write(metrics.createTaskMetricsDF())))
     appliMetrics.foreach(metrics => appliWriter.foreach(_.write(metrics.toSeq.toDF("name", "value"))))
 
-    // Stop Spark session
+    // Stop Spark session.
     spark.stop()
   }
 }
@@ -157,9 +202,10 @@ object Experiment {
 /*
 * Configuration DTO.
 * */
-case class ExperimentConfiguration(  metrics: MetricsConfiguration, dataset: DatasetConfiguration, algorithm: AlgorithmConfiguration)
-case class    MetricsConfiguration(    appli: Option[MetricConfiguration], spark: Option[MetricConfiguration])
-case class     MetricConfiguration(   writer:   ClassConfiguration)
-case class    DatasetConfiguration(   reader:   ClassConfiguration, transformers: Seq[ClassConfiguration], splitter: Option[ClassConfiguration])
-case class  AlgorithmConfiguration(estimator:   ClassConfiguration,   evaluators: Seq[ClassConfiguration])
-case class      ClassConfiguration(classname: String, parameters: Map[String, Any], name: Option[String])
+case class ExperimentConfiguration(     metrics: MetricsConfiguration, dataset: DatasetConfiguration, algorithm: AlgorithmConfiguration, spark: SparkConfiguration)
+case class    MetricsConfiguration(       appli: Option[MetricConfiguration], spark: Option[MetricConfiguration])
+case class     MetricConfiguration(      writer:   ClassConfiguration)
+case class    DatasetConfiguration(      reader:   ClassConfiguration, transformers: Seq[ClassConfiguration], splitter: Option[ClassConfiguration])
+case class  AlgorithmConfiguration(   estimator:   ClassConfiguration,   evaluators: Seq[ClassConfiguration])
+case class      ClassConfiguration(   classname: String, parameters: Map[String, Any], name: Option[String])
+case class      SparkConfiguration(storageLevel: String)

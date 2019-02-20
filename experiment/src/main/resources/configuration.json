@@ -1,4 +1,7 @@
 {
+  "spark": {
+    "storageLevel": "DISK_ONLY"
+  },
   "metrics": {
     "applicative": {
       "writer": {

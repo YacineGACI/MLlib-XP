@@ -32,7 +32,7 @@ object Main {
 
         // Validate Json and start experiment
         json.validate[ExperimentConfiguration] match {
-          case JsSuccess(config, _) => Experiment.perform(config)
+          case JsSuccess(config, _) => Experiment.from(config).perform()
           case JsError(errors)      => throw new IllegalArgumentException(errors.toString())
         }
     }
@@ -101,17 +101,22 @@ object Main {
   )(AlgorithmConfiguration.apply _)
 
   implicit val     metricConfigurationReads: Reads[MetricConfiguration    ] =
-    (JsPath \ "writer"     ).read[ClassConfiguration]
+    (JsPath \ "writer"      ).read[ClassConfiguration]
       .map(MetricConfiguration)
 
   implicit val    metricsConfigurationReads: Reads[MetricsConfiguration   ] = (
-    (JsPath \ "applicative").readNullable[MetricConfiguration] and
-    (JsPath \ "spark"      ).readNullable[MetricConfiguration]
+    (JsPath \ "applicative" ).readNullable[MetricConfiguration] and
+    (JsPath \ "spark"       ).readNullable[MetricConfiguration]
   )(MetricsConfiguration.apply _)
 
+  implicit val      sparkConfigurationReads: Reads[SparkConfiguration     ] =
+    (JsPath \ "storageLevel").read[String]
+      .map(SparkConfiguration)
+
   implicit val experimentConfigurationReads: Reads[ExperimentConfiguration] = (
-    (JsPath \ "metrics"    ).read[MetricsConfiguration]        and
-    (JsPath \ "dataset"    ).read[DatasetConfiguration]        and
-    (JsPath \ "algorithm"  ).read[AlgorithmConfiguration]
+    (JsPath \ "metrics"     ).read[MetricsConfiguration]        and
+    (JsPath \ "dataset"     ).read[DatasetConfiguration]        and
+    (JsPath \ "algorithm"   ).read[AlgorithmConfiguration]      and
+    (JsPath \ "spark"       ).read[SparkConfiguration]
   )(ExperimentConfiguration.apply _)
 }

@@ -115,7 +115,7 @@ object Experiment {
     // Create a fresh Spark session
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
-    implicit val spark: SparkSession = SparkSession.builder().master("local").getOrCreate()
+    implicit val spark: SparkSession = SparkSession.builder().getOrCreate()
 
     // Start collect of Spark metrics if enabled
     val sparkMetrics = sparkWriter.map(_ => TaskMetrics(spark))

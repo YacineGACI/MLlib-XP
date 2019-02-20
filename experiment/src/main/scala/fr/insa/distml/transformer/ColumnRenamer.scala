@@ -34,7 +34,8 @@ class ColumnRenamer(override val uid: String) extends Transformer {
   override def copy(extra: ParamMap): Transformer = defaultCopy(extra)
 
   override def transformSchema(schema: StructType): StructType = {
-    val existing = schema.fields.find(_.name == _existingName).getOrElse(throw new NoSuchElementException)
+    val existingName = _existingName // Avoid VarClosure
+    val existing = schema.fields.find(_.name == existingName).getOrElse(throw new NoSuchElementException)
     StructType(schema.fields :+ StructField(_newName, existing.dataType, existing.nullable, existing.metadata))
   }
 }

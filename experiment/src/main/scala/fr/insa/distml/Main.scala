@@ -25,7 +25,6 @@ object Main {
     parser.parse(args, Arguments("")) match {
       case None             => Unit
       case Some(parameters) =>
-
         // Read experiment's configuration from a specified file or directly from the argument
         val json = Path(parameters.config)
           .ifFile(file => Json.parse(file.inputStream()))
@@ -33,7 +32,7 @@ object Main {
 
         // Validate Json and start experiment
         json.validate[ExperimentConfiguration] match {
-          case JsSuccess(config, _) => Experiment.startExperiment(config)
+          case JsSuccess(config, _) => Experiment.perform(config)
           case JsError(errors)      => throw new IllegalArgumentException(errors.toString())
         }
     }

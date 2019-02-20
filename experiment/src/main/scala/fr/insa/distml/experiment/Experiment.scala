@@ -67,6 +67,7 @@ object Experiment {
           case Some(_: java.lang.Integer) => castArray[Int    ](o)
           case Some(_: java.lang.Double)  => castArray[Double ](o)
           case Some(_: java.lang.Boolean) => castArray[Boolean](o)
+          case Some(_: java.lang.String)  => castArray[String](o)
           case Some(_)                    => o
           case None                       => throw new IllegalArgumentException("Array must not be empty to infer type")
         }
@@ -85,16 +86,16 @@ object Experiment {
   * Surround a call-by-name block of code with a timer.
   * */
   private def time[R](block: => R): (R, Long) = {
-    val start = System.currentTimeMillis()
+    val start  = System.currentTimeMillis()
     val result = block
-    val end = System.currentTimeMillis()
+    val end    = System.currentTimeMillis()
     (result, end - start)
   }
 
   /*
-  * Start a new experiment based on the specified configuration for this run.
+  * Perform a new experiment based on the specified configuration for this run.
   * */
-  def startExperiment(conf: ExperimentConfiguration): Unit = {
+  def perform(conf: ExperimentConfiguration): Unit = {
 
     // Create beans to be used in the experiment
     val appliWriter  = conf.metrics.appli.map(_.writer).map(fromClassConfiguration[Writer])
@@ -114,23 +115,23 @@ object Experiment {
     // Create a fresh Spark session
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
-    implicit val spark: SparkSession = SparkSession.builder().getOrCreate()
+    implicit val spark: SparkSession = SparkSession.builder().master("local").getOrCreate()
 
     // Start collect of Spark metrics if enabled
     val sparkMetrics = sparkWriter.map(_ => TaskMetrics(spark))
     sparkMetrics.foreach(_.begin())
 
     // Reading raw dataset and apply preprocessing pipeline on it
-    val raw = reader.read()
+    val raw          = reader.read()
     val preprocessor = preprocessing.fit(raw)
-    val data = preprocessor.transform(raw)
+    val data         = preprocessor.transform(raw)
 
     // Perform train/test split if enabled
     val Array(train, test) = splitter.map(_.split(data)).getOrElse(Array(data, data))
 
     // Fit on train data and transform test data
-    val (      model,       fitTime) = time { learning.fit(train) }
-    val (predictions, transformTime) = time { model.transform(test) }
+    val (      model,       fitTime) = time { learning.fit(train)   }
+    val (predictions, transformTime) = time { model.transform(test) } // TODO: See if DataFrame are lazily evaluated
 
     // Stop collect of Spark metrics if enabled
     sparkMetrics.foreach(_.end())

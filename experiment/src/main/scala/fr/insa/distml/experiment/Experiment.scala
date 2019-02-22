@@ -6,6 +6,7 @@ import fr.insa.distml.splitter.Splitter
 import fr.insa.distml.writer.Writer
 import org.apache.spark.ml.{Estimator, Pipeline, PipelineStage, Transformer}
 import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.feature._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
 import scala.collection.immutable._
@@ -24,7 +25,7 @@ object Experiment {
   * We do not support setter methods which take a boxed AnyVal (java.lang.Integer).
   * */
   private def newParameterizedInstance[C: ClassTag](classname: String, parameters: Map[String, Any]): C = {
-
+    println(classname)
     // Create new instance
     val obj = asInstanceOfOption[C](
       Class.forName(classname).getConstructor().newInstance()
@@ -93,7 +94,7 @@ object Experiment {
     val sparkWriter  = conf.metrics.spark.map(_.writer).map(fromClassConfiguration[Writer])
 
     val reader       = fromClassConfiguration[Reader](conf.dataset.reader)
-    val transformers = conf.dataset.transformers.map(fromClassConfiguration[Transformer])
+    val transformers = conf.dataset.transformers.map(fromClassConfiguration[PipelineStage])
     val splitter     = conf.dataset.splitter.map(fromClassConfiguration[Splitter])
 
     val estimator    = fromClassConfiguration[Estimator[_]](conf.algorithm.estimator)
@@ -116,7 +117,7 @@ class Experiment(
    appliWriter: Option[Writer],
    sparkWriter: Option[Writer],
         reader: Reader,
-  transformers: Seq[Transformer],
+  transformers: Seq[PipelineStage],
       splitter: Option[Splitter],
      estimator: Estimator[_],
     evaluators: Seq[(Evaluator, String)],
@@ -145,7 +146,7 @@ class Experiment(
     // Create a fresh Spark session.
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
-    implicit val spark: SparkSession = SparkSession.builder().master("local").getOrCreate()
+    implicit val spark: SparkSession = SparkSession.builder().master("local[*]").getOrCreate()
 
     // Reading raw dataset and apply preprocessing pipeline on it.
     val raw          = reader.read()

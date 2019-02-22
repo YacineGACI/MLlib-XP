@@ -1,211 +1,133 @@
 package fr.insa.distml.experiment
 
 import ch.cern.sparkmeasure.TaskMetrics
+
 import fr.insa.distml.reader.Reader
 import fr.insa.distml.splitter.Splitter
 import fr.insa.distml.writer.Writer
-import org.apache.spark.ml.{Estimator, Pipeline, PipelineStage, Transformer}
+
+import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.SparkConf
+
 import scala.collection.immutable._
 import scala.reflect.ClassTag
+import scala.language.existentials
+
+import fr.insa.distml.experiment.types._
+import fr.insa.distml.utils._
 
 object Experiment {
 
   /*
-  * Similar to asInstanceOf, but return an Option when the casting failed.
-  * */
-  private def asInstanceOfOption[T: ClassTag](o: Any): Option[T] = Some(o) collect { case m: T => m }
-
-  /*
-  * Create a new parameterized instance of a class by calling its setter methods after instantiation.
-  * We do not support setter methods with more than one argument since we use a Map[String, Any] instead of a Map[String, Array[Any]].
-  * We do not support setter methods which take a boxed AnyVal (java.lang.Integer).
-  * */
-  private def newParameterizedInstance[C: ClassTag](classname: String, parameters: Map[String, Any]): C = {
-
-    // Create new instance
-    val obj = asInstanceOfOption[C](
-      Class.forName(classname).getConstructor().newInstance()
-    ).getOrElse(throw new IllegalArgumentException("Invalid class type"))
-
-    for((key, value) <- parameters) {
-
-      // Un-boxing Java Object to Scala AnyVal
-      val cls = value match {
-        case _: java.lang.Integer => classOf[Int]
-        case _: java.lang.Double  => classOf[Double]
-        case _: java.lang.Boolean => classOf[Boolean]
-        case _: Map[_, _]         => classOf[Map[_, _]] // To interpret a Map$Map1 type as a Map type
-        case o                    => o.getClass
-      }
-
-      // Invoke setter method to configure the instance
-      val method = obj.getClass.getMethod("set" + key.capitalize, Array[Class[_]](cls):_*)
-      method.invoke(obj, Array[AnyRef](asInstanceOfOption[AnyRef](value).getOrElse(throw new RuntimeException)):_*) // Auto-boxing AnyVal to AnyRef (Object)
-    }
-
-    obj
-  }
-
-  /*
-  * Cast an array of type Array[_] to an array of type Array[T] along with its contents.
-  * */
-  private def castArray[T: ClassTag](array: Array[_]): Array[T] = {
-    array.map(asInstanceOfOption[T]).map(_.getOrElse(throw new IllegalArgumentException("Failed to cast array content")))
-  }
-
-  /*
-  * Cast a parameter of type Any to a compatible Java type for setter methods.
-  * This method is primarily used to cast Object[] arrays to int[] arrays (or the corresponding type of the first element, thus array must not be empty).
-  * This is due to the fact that Json arrays can contain anything when parsing.
-  * */
-  private def castParameter(parameter: Any): Any = {
-    parameter match {
-      case o: Array[_] =>
-        o.headOption match {
-          case Some(_: java.lang.Integer) => castArray[Int    ](o)
-          case Some(_: java.lang.Double)  => castArray[Double ](o)
-          case Some(_: java.lang.Boolean) => castArray[Boolean](o)
-          case Some(_: java.lang.String)  => castArray[String](o)
-          case Some(_)                    => o
-          case None                       => throw new IllegalArgumentException("Array must not be empty to infer type")
-        }
-      case o           => o
-    }
-  }
-
-  /*
   * Create a new parameterized instance from a class configuration.
   * */
-  private def fromClassConfiguration[C: ClassTag](config: ClassConfiguration): C = {
-    newParameterizedInstance[C](config.classname, config.parameters.mapValues(castParameter))
+  private def fromClassConfig[T: ClassTag](config: ClassConfig): T = {
+    newParameterizedInstance[T](config.classname, config.parameters)
   }
 
   /*
   * Create a new experiment based on the specified configuration for this run.
   * */
-  def from(conf: ExperimentConfiguration): Experiment = {
+  def from(conf: ExperimentConfig): Experiment = {
 
     // Create beans to be used in the experiment.
-    val appliWriter  = conf.metrics.appli.map(_.writer).map(fromClassConfiguration[Writer])
-    val sparkWriter  = conf.metrics.spark.map(_.writer).map(fromClassConfiguration[Writer])
+    val Array(appliWriter, sparkWriter) =
+      Array(conf.metrics.appli, conf.metrics.spark)
+        .map(_.map(_.writer).map(fromClassConfig[Writer]))
 
-    val reader       = fromClassConfiguration[Reader](conf.dataset.reader)
-    val transformers = conf.dataset.transformers.map(fromClassConfiguration[Transformer])
-    val splitter     = conf.dataset.splitter.map(fromClassConfiguration[Splitter])
+    val Array(transformers, preprocessors, postprocessors) =
+      Array(conf.workflow.transformers, conf.workflow.preprocessors, conf.workflow.postprocessors)
+        .map(_.map(fromClassConfig[PipelineStage]))
+        .map(stages => new Pipeline().setStages(stages))
 
-    val estimator    = fromClassConfiguration[Estimator[_]](conf.algorithm.estimator)
-    val evaluators   = conf.algorithm.evaluators.map(cls => (
-      fromClassConfiguration[Evaluator](cls),
-      cls.name.getOrElse(throw new IllegalArgumentException("Missing name for evaluator"))
-    ))
+    val reader     = fromClassConfig[Reader](conf.workflow.reader)
+    val estimator  = fromClassConfig[AnyEstimator](conf.workflow.estimator)
 
-    val storageLevel =
-      asInstanceOfOption[StorageLevel](StorageLevel.getClass.getMethod(conf.spark.storageLevel)
-        .invoke(StorageLevel))
-        .getOrElse(throw new IllegalArgumentException("Bad storage level"))
+    val splitter   = conf.workflow.splitter.map(fromClassConfig[Splitter])
+    val evaluators = conf.workflow.evaluators.map(fromClassConfig[Evaluator])
+    val names      = conf.workflow.evaluators.map(_.name.getOrElse(throw new IllegalArgumentException("Missing name for evaluator")))
+
+    val storage    = cast[StorageLevel](StorageLevel.getClass.getMethod(conf.execution.storage).invoke(StorageLevel))
+
+    val sparkConf  = new SparkConf().setAll(conf.spark)
 
     // Inject beans and create a new experiment.
-    new Experiment(appliWriter, sparkWriter, reader, transformers, splitter, estimator, evaluators, storageLevel)
+    new Experiment(storage, conf.execution.lazily, sparkConf, appliWriter, sparkWriter,
+      reader, transformers, splitter, preprocessors, estimator, postprocessors, names.zip(evaluators))
   }
 }
 
 class Experiment(
-   appliWriter: Option[Writer],
-   sparkWriter: Option[Writer],
-        reader: Reader,
-  transformers: Seq[Transformer],
-      splitter: Option[Splitter],
-     estimator: Estimator[_],
-    evaluators: Seq[(Evaluator, String)],
-  storageLevel: StorageLevel
+  storage: StorageLevel, lazily: Boolean, sparkConf: SparkConf, appliWriter: Option[Writer], sparkWriter: Option[Writer],
+  reader: Reader, transformers: Pipeline, splitter: Option[Splitter], preprocessors: Pipeline,
+  estimator: AnyEstimator, postprocessors: Pipeline, evaluators: Array[(String, Evaluator)]
 ) {
 
-  /*
-  * Time a block of code (call-by-name).
-  * */
-  private def time[R](block: => R): (R, Long) = {
-    val start  = System.currentTimeMillis()
-    val result = block
-    val end    = System.currentTimeMillis()
-    (result, end - start)
+  def perform(): Unit = {
+    withNewSparkSession(sparkConf, implicit session => execute)
   }
 
-  /*
-  * Perform experiment.
-  * */
-  def perform(): Unit = {
+  private def execute()(implicit session: SparkSession): Unit = {
+    // Reading raw dataset.
+    val raw = reader.read()
 
-    // Create pipelines.
-    val preprocessing = new Pipeline().setStages(transformers.toArray[PipelineStage])
-    val learning      = new Pipeline().setStages(Array[PipelineStage](estimator))
-
-    // Create a fresh Spark session.
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    implicit val spark: SparkSession = SparkSession.builder().master("local").getOrCreate()
-
-    // Reading raw dataset and apply preprocessing pipeline on it.
-    val raw          = reader.read()
-    val preprocessor = preprocessing.fit(raw)
-    val data         = preprocessor.transform(raw)
+    // Apply transformation.
+    val transformation = transformers.fit(raw)
+    val data = transformation.transform(raw)
 
     // Perform train/test split if enabled.
-    val Array(train, test) = splitter.map(_.split(data)).getOrElse(Array(data, data))
+    val Array(trainData, testData) = splitter.map(_.split(data)).getOrElse(Array(data, data))
 
-    // Persist DataFrame to avoid computation.
-    Array(train, test).foreach(_.persist(storageLevel))
+    // Apply preprocessing.
+    val preprocessing = preprocessors.fit(trainData)
+    val Array(train, test) = Array(trainData, testData).map(preprocessing.transform)
 
-    // Force computation to happen before fitting the model.
-    Array(train, test).foreach(_.count())
+    // Persist DataFrame to avoid computation when fitting the model if enabled.
+    if(!lazily)
+      Array(train, test).foreach(_.persist(storage).count())
 
     // Start collect of Spark metrics if enabled.
-    val sparkMetrics = sparkWriter.map(_ => TaskMetrics(spark))
+    val sparkMetrics = sparkWriter.map(_ => TaskMetrics(session))
     sparkMetrics.foreach(_.begin())
 
     // Fit on train data and transform test data
-    val (  model,       fitTime) = time { learning.fit(train) }
-    val (results, transformTime) = time {
+    val (      model,       fitTime) = time { estimator.fit(train) }
+    val (predictions, transformTime) = time {
       val predictions = model.transform(test)
-      // Force DataFrame computation for collecting metrics
-      predictions.count()
+      // Force DataFrame computation when collecting metrics if enabled
+      if(!lazily)
+        predictions.count()
       predictions
     }
 
     // Stop collect of Spark metrics if enabled.
     sparkMetrics.foreach(_.end())
 
-    // Persist DataFrame before looping on each evaluator
-    // It wasn't called previously to ensure it doesn't impact metrics, thus we compute the DataFrame twice.
-    results.persist(storageLevel)
+    // Apply postprocessing.
+    val postprocessing = postprocessors.fit(predictions)
+    val results = postprocessing.transform(predictions)
+
+    // Persist DataFrame before looping on each evaluator.
+    results.persist(storage)
 
     // Collect applicative metrics if enabled.
     val appliMetrics = appliWriter.map(_ =>
-      (for((evaluator, name) <- evaluators)
-        yield         name -> evaluator.evaluate(results)).toMap
-        + (      "fitTime" ->       fitTime.toDouble)
-        + ("transformTime" -> transformTime.toDouble)
+      (for ((name, evaluator) <- evaluators)
+        yield               name -> evaluator.evaluate(results)).toMap[String, AnyVal]
+        + (            "fitTime" ->              fitTime)
+        + (      "transformTime" ->        transformTime)
+        + (         "trainCount" ->        train.count())
+        + ("resultsFirstRowSize" -> results.first().size)
+        + (          "testCount" ->         test.count())
     )
 
     // Save metrics.
-    import spark.implicits._
+    import session.implicits._
     sparkMetrics.foreach(metrics => sparkWriter.foreach(_.write(metrics.createTaskMetricsDF())))
     appliMetrics.foreach(metrics => appliWriter.foreach(_.write(metrics.toSeq.toDF("name", "value"))))
-
-    // Stop Spark session.
-    spark.stop()
   }
 }
 
-/*
-* Configuration DTO.
-* */
-case class ExperimentConfiguration(     metrics: MetricsConfiguration, dataset: DatasetConfiguration, algorithm: AlgorithmConfiguration, spark: SparkConfiguration)
-case class    MetricsConfiguration(       appli: Option[MetricConfiguration], spark: Option[MetricConfiguration])
-case class     MetricConfiguration(      writer:   ClassConfiguration)
-case class    DatasetConfiguration(      reader:   ClassConfiguration, transformers: Seq[ClassConfiguration], splitter: Option[ClassConfiguration])
-case class  AlgorithmConfiguration(   estimator:   ClassConfiguration,   evaluators: Seq[ClassConfiguration])
-case class      ClassConfiguration(   classname: String, parameters: Map[String, Any], name: Option[String])
-case class      SparkConfiguration(storageLevel: String)

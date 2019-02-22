@@ -1,6 +1,10 @@
 {
   "spark": {
-    "storageLevel": "DISK_ONLY"
+    "spark.master": "local"
+  },
+  "execution": {
+    "storage": "MEMORY_ONLY",
+    "lazily": false
   },
   "metrics": {
     "applicative": {
@@ -30,7 +34,7 @@
       }
     }
   },
-  "dataset": {
+  "workflow": {
     "reader": {
       "classname": "fr.insa.distml.reader.SparkReader",
       "parameters": {
@@ -64,15 +68,15 @@
       "parameters": {
         "weights": [0.8, 0.2]
       }
-    }
-  },
-  "algorithm": {
+    },
+    "preprocessors": [],
     "estimator": {
       "classname": "org.apache.spark.ml.classification.DecisionTreeClassifier",
       "parameters": {
         "maxDepth": 10
       }
     },
+    "postprocessors": [],
     "evaluators": [
       {
         "name": "f1",

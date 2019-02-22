@@ -1,14 +1,13 @@
 package fr.insa.distml.writer
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
-
 import scala.collection.immutable._
 
 class SparkWriter extends Writer {
 
   private var _location: String = _
   private var _format:   String = _
-  private var _coalesce: Option[Int]      = None
+  private var _coalesce: Option[Int] = None
   private var _options:  Map[String, Any] = Map.empty
 
   def setLocation(location: String): this.type = {
@@ -42,12 +41,10 @@ class SparkWriter extends Writer {
   override def write(dataframe: DataFrame)(implicit spark: SparkSession): Unit = {
 
     val df = _coalesce.map(dataframe.coalesce).getOrElse(dataframe)
-
     val writer = df.write.format(_format)
 
-    for((key, value) <- _options) {
+    for((key, value) <- _options)
       writer.option(key, value.toString)
-    }
 
     writer.save(_location)
   }

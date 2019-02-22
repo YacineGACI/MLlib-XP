@@ -1,7 +1,6 @@
 package fr.insa.distml.reader
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
-
 import scala.collection.immutable._
 
 class SparkReader extends Reader {
@@ -33,9 +32,8 @@ class SparkReader extends Reader {
 
     val reader = spark.read.format(_format)
 
-    for((key, value) <- _options) {
+    for((key, value) <- _options)
       reader.option(key, value.toString)
-    }
 
     reader.load(_location)
   }

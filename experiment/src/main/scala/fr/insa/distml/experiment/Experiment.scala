@@ -16,21 +16,21 @@ import scala.language.existentials
 
 class Experiment(config: ExperimentConfig) {
 
-  val             reader: Reader                     = config.workflow.reader
-  val           splitter: Option[Splitter]           = config.workflow.splitter
-  val       transformers: Pipeline                   = config.workflow.transformers
-  val      preprocessors: Pipeline                   = config.workflow.preprocessors
-  val     postprocessors: Pipeline                   = config.workflow.postprocessors
-  val         estimators: Pipeline                   = config.workflow.estimators
-  val         evaluators: Map[String, Evaluator]     = config.workflow.evaluators
+  private val             reader: Reader                     = config.workflow.reader
+  private val           splitter: Option[Splitter]           = config.workflow.splitter
+  private val       transformers: Pipeline                   = config.workflow.transformers
+  private val      preprocessors: Pipeline                   = config.workflow.preprocessors
+  private val     postprocessors: Pipeline                   = config.workflow.postprocessors
+  private val         estimators: Pipeline                   = config.workflow.estimators
+  private val         evaluators: Map[String, Evaluator]     = config.workflow.evaluators
 
-  val             lazily: Boolean                    = config.execution.lazily
-  val            storage: StorageLevel               = config.execution.storage
+  private val             lazily: Boolean                    = config.execution.lazily
+  private val            storage: StorageLevel               = config.execution.storage
 
-  val sparkMetricsConfig: Option[SparkMetricsConfig] = config.metrics.spark
-  val appliMetricsConfig: Option[AppliMetricsConfig] = config.metrics.appli
+  private val sparkMetricsConfig: Option[SparkMetricsConfig] = config.metrics.spark
+  private val appliMetricsConfig: Option[AppliMetricsConfig] = config.metrics.appli
 
-  val          sparkConf: SparkConf                  = config.sparkConf
+  private val          sparkConf: SparkConf                  = config.sparkConf
 
   def perform(): Unit = {
     withSparkSession(sparkConf, implicit spark => execute)

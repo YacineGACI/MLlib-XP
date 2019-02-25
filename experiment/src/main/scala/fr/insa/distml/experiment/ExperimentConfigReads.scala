@@ -26,13 +26,6 @@ object ExperimentConfigReads {
   }
 
   /*
-  * Create a new parameterized instance reader from a class configuration.
-  * */
-  private def newParameterizedInstanceReads[T: ClassTag](): Reads[T] = {
-    mapReads[ClassConfig, T](fromClassConfig[T])
-  }
-
-  /*
   * Create a new reader by applying a function to an existing reader.
   * */
   private def mapReads[C, T](f: C => T)(implicit rds: Reads[C]): Reads[T] = {
@@ -102,14 +95,13 @@ object ExperimentConfigReads {
     (JsPath \ "parameters"    ).read[Map[String, Any]]
   )(ClassConfig)
 
-  implicit val    sparkConfReads: Reads[SparkConf   ] = mapReads[Map[String, String], SparkConf](conf   => new SparkConf().setAll(conf))
-  implicit val storageLevelReads: Reads[StorageLevel] = mapReads[String,           StorageLevel](level  => cast[StorageLevel](StorageLevel.getClass.getMethod(level).invoke(StorageLevel)))
-  implicit val     pipelineReads: Reads[Pipeline    ] = mapReads[Array[ClassConfig],   Pipeline](stages => new Pipeline().setStages(stages.map(fromClassConfig[PipelineStage])))
-
-  implicit val       readerReads: Reads[Reader   ] = newParameterizedInstanceReads[Reader   ]()
-  implicit val       writerReads: Reads[Writer   ] = newParameterizedInstanceReads[Writer   ]()
-  implicit val     splitterReads: Reads[Splitter ] = newParameterizedInstanceReads[Splitter ]()
-  implicit val    evaluatorReads: Reads[Evaluator] = newParameterizedInstanceReads[Evaluator]()
+  implicit val    sparkConfReads: Reads[SparkConf   ] = mapReads[Map[String, String], SparkConf   ](x => new SparkConf().setAll(x))
+  implicit val storageLevelReads: Reads[StorageLevel] = mapReads[             String, StorageLevel](x => cast[StorageLevel](StorageLevel.getClass.getMethod(x).invoke(StorageLevel)))
+  implicit val     pipelineReads: Reads[Pipeline    ] = mapReads[ Array[ClassConfig], Pipeline    ](x => new Pipeline().setStages(x.map(fromClassConfig[PipelineStage])))
+  implicit val       readerReads: Reads[Reader      ] = mapReads[        ClassConfig, Reader      ](fromClassConfig[Reader   ])
+  implicit val       writerReads: Reads[Writer      ] = mapReads[        ClassConfig, Writer      ](fromClassConfig[Writer   ])
+  implicit val     splitterReads: Reads[Splitter    ] = mapReads[        ClassConfig, Splitter    ](fromClassConfig[Splitter ])
+  implicit val    evaluatorReads: Reads[Evaluator   ] = mapReads[        ClassConfig, Evaluator   ](fromClassConfig[Evaluator])
 
   implicit val     sparkMetricsConfigReads: Reads[SparkMetricsConfig] = (
     (JsPath \ "level"         ).read[String]                     and
@@ -127,11 +119,11 @@ object ExperimentConfigReads {
 
   implicit val        executionConfigReads: Reads[ExecutionConfig   ] = (
     (JsPath \ "storage"       ).read[StorageLevel]               and
-    (JsPath \ "lazily"        ).read[Boolean]
+    (JsPath \ "lazily"        ).read[Boolean     ]
   )(ExecutionConfig)
 
   implicit val         workflowConfigReads: Reads[WorkflowConfig    ] = (
-    (JsPath \ "reader"        ).read[Reader]                     and
+    (JsPath \ "reader"        ).read[Reader  ]                   and
     (JsPath \ "transformers"  ).read[Pipeline]                   and
     (JsPath \ "splitter"      ).readNullable[Splitter]           and
     (JsPath \ "preprocessors" ).read[Pipeline]                   and

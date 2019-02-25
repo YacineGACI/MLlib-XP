@@ -1,6 +1,7 @@
 package fr.insa.distml.writer
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
+
 import scala.collection.immutable._
 
 class SparkWriter extends Writer {

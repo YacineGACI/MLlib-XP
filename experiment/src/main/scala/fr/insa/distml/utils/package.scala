@@ -90,15 +90,12 @@ package object utils {
   }
 
   /*
-  * Execute a function if the specified option is defined
-  * */
-  def ifDefined[T](option: Option[T])(f: T => Unit): Unit = {
-    option.foreach(f)
-  }
-
-  /*
   * Execute a function if the specified options are defined
   * */
+  def ifDefined[T](optionA: Option[T])(f: T => Unit): Unit = {
+    optionA.foreach(a => f(a))
+  }
+
   def ifDefined[T, C](optionA: Option[T], optionB: Option[C])(f: (T, C) => Unit): Unit = {
     optionA.foreach(a => optionB.foreach(b => f(a, b)))
   }

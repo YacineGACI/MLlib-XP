@@ -16,21 +16,21 @@ import scala.language.existentials
 
 class Experiment(config: ExperimentConfig) {
 
-  val                reader: Reader                     = config.workflow.reader
-  val              splitter: Option[Splitter]           = config.workflow.splitter
-  val          transformers: Pipeline                   = config.workflow.transformers
-  val         preprocessors: Pipeline                   = config.workflow.preprocessors
-  val        postprocessors: Pipeline                   = config.workflow.postprocessors
-  val            estimators: Pipeline                   = config.workflow.estimators
-  val            evaluators: Map[String, Evaluator]     = config.workflow.evaluators
+  val             reader: Reader                     = config.workflow.reader
+  val           splitter: Option[Splitter]           = config.workflow.splitter
+  val       transformers: Pipeline                   = config.workflow.transformers
+  val      preprocessors: Pipeline                   = config.workflow.preprocessors
+  val     postprocessors: Pipeline                   = config.workflow.postprocessors
+  val         estimators: Pipeline                   = config.workflow.estimators
+  val         evaluators: Map[String, Evaluator]     = config.workflow.evaluators
 
-  val                lazily: Boolean                    = config.execution.lazily
-  val               storage: StorageLevel               = config.execution.storage
+  val             lazily: Boolean                    = config.execution.lazily
+  val            storage: StorageLevel               = config.execution.storage
 
-  val    sparkMetricsConfig: Option[SparkMetricsConfig] = config.metrics.spark
-  val    appliMetricsConfig: Option[AppliMetricsConfig] = config.metrics.appli
+  val sparkMetricsConfig: Option[SparkMetricsConfig] = config.metrics.spark
+  val appliMetricsConfig: Option[AppliMetricsConfig] = config.metrics.appli
 
-  val             sparkConf: SparkConf                  = config.sparkConf
+  val          sparkConf: SparkConf                  = config.sparkConf
 
   def perform(): Unit = {
     withSparkSession(sparkConf, implicit spark => execute)
@@ -89,7 +89,7 @@ class Experiment(config: ExperimentConfig) {
         "fitTime" -> fitTime, "transformTime" -> transformTime,
         "trainCount" -> train.count(), "testCount" -> test.count(),
         "resultsFirstRowSize" -> results.first().size)
-      writer.write((evaluMetrics.toSeq ++ appliMetrics.toSeq).toDF("name", "value"))
+      writer.write((evaluMetrics ++ appliMetrics).toSeq.toDF("name", "value"))
     })
   }
 }

@@ -1,0 +1,137 @@
+{
+  "spark": {
+  },
+  "execution": {
+    "storage": "MEMORY_ONLY",
+    "lazily": false
+  },
+  "metrics": {
+    "applicative": {
+      "writer": {
+        "classname": "fr.insa.distml.writer.SparkWriter",
+        "parameters": {
+          "location": "./metrics/app-metrics.csv",
+          "format": "csv",
+          "coalesce": 1,
+          "options": {
+            "header": true
+          }
+        }
+      }
+    },
+    "spark": {
+      "level": "task",
+      "writer": {
+        "classname": "fr.insa.distml.writer.SparkWriter",
+        "parameters": {
+          "location": "./metrics/spark-metrics.csv",
+          "format": "csv",
+          "coalesce": 1,
+          "options": {
+            "header": true
+          }
+        }
+      }
+    }
+  },
+  "workflow": {
+    "reader": {
+      "classname": "fr.insa.distml.reader.SparkReader",
+      "parameters": {
+        "format": "csv",
+        "location": "hdfs://localhost:9000/data/drugs.tsv",
+        "options": {
+          "sep": "\t",
+          "inferSchema": true,
+          "header": true
+        }
+      }
+    },
+    "transformers": [
+      {
+        "classname": "org.apache.spark.ml.feature.StringIndexer",
+        "parameters": {
+          "inputCol": "_c0",
+          "outputCol": "_c0_indexed",
+          "handleInvalid": "keep"
+        }
+      },
+      {
+        "classname": "org.apache.spark.ml.feature.StringIndexer",
+        "parameters": {
+          "inputCol": "drugName",
+          "outputCol": "drugName_indexed",
+          "handleInvalid": "keep"
+        }
+      },
+      {
+        "classname": "org.apache.spark.ml.feature.StringIndexer",
+        "parameters": {
+          "inputCol": "condition",
+          "outputCol": "condition_indexed",
+          "handleInvalid": "keep"
+        }
+      },
+      {
+        "classname": "org.apache.spark.ml.feature.StringIndexer",
+        "parameters": {
+          "inputCol": "review",
+          "outputCol": "review_indexed",
+          "handleInvalid": "keep"
+        }
+      },
+      {
+        "classname": "org.apache.spark.ml.feature.StringIndexer",
+        "parameters": {
+          "inputCol": "date",
+          "outputCol": "date_indexed",
+          "handleInvalid": "keep"
+        }
+      },
+      {
+        "classname": "org.apache.spark.ml.feature.VectorAssembler",
+        "parameters": {
+          "inputCols": ["_c0_indexed", "drugName_indexed", "condition_indexed", "review_indexed", "date_indexed", "usefulCount"],
+          "outputCol": "features"
+        }
+      },
+      {
+        "classname": "fr.insa.distml.transformer.ColumnRenamer",
+        "parameters": {
+          "existingName": "rating",
+          "newName": "label"
+        }
+      }
+    ],
+    "splitter": {
+      "classname": "fr.insa.distml.splitter.RandomSplitter",
+      "parameters": {
+        "weights": [0.8, 0.2]
+      }
+    },
+    "preprocessors": [],
+    "estimators": [
+      {
+        "classname": "org.apache.spark.ml.classification.DecisionTreeClassifier",
+        "parameters": {
+          "maxDepth": 10
+        }
+      }
+    ],
+    "postprocessors": [],
+    "evaluators": {
+      "f1": {
+        "classname": "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator",
+        "parameters": {
+          "metricName": "f1"
+        }
+      },
+      "accuracy": {
+        "classname": "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator",
+        "parameters": {
+          "metricName": "accuracy"
+        }
+      }
+    }
+  }
+}

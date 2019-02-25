@@ -41,4 +41,5 @@ object Main {
   }
 
   case class Arguments(config: String)
+
 }

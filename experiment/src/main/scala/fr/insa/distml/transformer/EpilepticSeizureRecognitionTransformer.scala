@@ -17,7 +17,7 @@ class EpilepticSeizureRecognitionTransformer(override val uid: String) extends T
   override def transform(dataset: Dataset[_]): DataFrame = {
 
     val assembler = new VectorAssembler()
-      .setInputCols((for(i <- List.range(1, 179)) yield s"X$i").toArray)
+      .setInputCols((for (i <- List.range(1, 179)) yield s"X$i").toArray)
       .setOutputCol("features")
 
     assembler.transform(dataset.withColumnRenamed("y", "label"))

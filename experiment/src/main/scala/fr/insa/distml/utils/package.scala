@@ -40,9 +40,9 @@ package object utils {
       }
 
       // Invoke setter method to configure the instance
-      val method = obj.getClass.getMethod("set" + name.capitalize, Array(cls):_*)
+      val method = obj.getClass.getMethod("set" + name.capitalize, Array(cls): _*)
 
-      method.invoke(obj, Array(cast[AnyRef](value)):_*) // Auto-boxing AnyVal to AnyRef (Object)
+      method.invoke(obj, Array(cast[AnyRef](value)): _*) // Auto-boxing AnyVal to AnyRef (Object)
     }
 
     obj

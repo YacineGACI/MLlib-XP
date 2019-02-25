@@ -33,7 +33,7 @@ class SparkReader extends Reader {
 
     val reader = spark.read.format(_format)
 
-    for((key, value) <- _options)
+    for ((key, value) <- _options)
       reader.option(key, value.toString)
 
     reader.load(_location)

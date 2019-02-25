@@ -44,7 +44,7 @@ class SparkWriter extends Writer {
     val df = _coalesce.map(dataframe.coalesce).getOrElse(dataframe)
     val writer = df.write.format(_format)
 
-    for((key, value) <- _options)
+    for ((key, value) <- _options)
       writer.option(key, value.toString)
 
     writer.save(_location)

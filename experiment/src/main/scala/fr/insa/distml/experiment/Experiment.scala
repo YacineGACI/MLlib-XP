@@ -52,7 +52,7 @@ class Experiment(config: ExperimentConfig) {
     val Array(train, test) = Array(trainData, testData).map(preprocessing.transform)
 
     // Persist DataFrame to avoid computation when fitting the model if enabled.
-    if(!lazily)
+    if (!lazily)
       Array(train, test).foreach(_.persist(storage).count())
 
     val collector = sparkMetricsConfig.map(_.level).map(MetricsCollectors.fromLevel)
@@ -65,7 +65,7 @@ class Experiment(config: ExperimentConfig) {
     val (predictions, transformTime) = time {
       val predictions = model.transform(test)
       // Force DataFrame computation when collecting metrics if enabled
-      if(!lazily)
+      if (!lazily)
         predictions.count()
       predictions
     }

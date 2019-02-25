@@ -5,8 +5,10 @@ import java.util.NoSuchElementException
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 trait MetricsCollector {
-  def   begin(): Long
-  def     end(): Long
+  def begin(): Long
+
+  def end(): Long
+
   def collect(): DataFrame
 }
 

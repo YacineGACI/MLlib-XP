@@ -1,10 +1,9 @@
 package fr.insa.distml.experiment
 
-import ch.cern.sparkmeasure.TaskMetrics
-
+import fr.insa.distml.metrics.MetricsCollectors
 import fr.insa.distml.reader.Reader
 import fr.insa.distml.splitter.Splitter
-import fr.insa.distml.writer.Writer
+import fr.insa.distml.utils._
 
 import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
@@ -13,64 +12,31 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.SparkConf
 
 import scala.collection.immutable._
-import scala.reflect.ClassTag
 import scala.language.existentials
 
-import fr.insa.distml.experiment.types._
-import fr.insa.distml.utils._
+class Experiment(config: ExperimentConfig) {
 
-object Experiment {
+  val                reader: Reader                     = config.workflow.reader
+  val              splitter: Option[Splitter]           = config.workflow.splitter
+  val          transformers: Pipeline                   = config.workflow.transformers
+  val         preprocessors: Pipeline                   = config.workflow.preprocessors
+  val        postprocessors: Pipeline                   = config.workflow.postprocessors
+  val            estimators: Pipeline                   = config.workflow.estimators
+  val            evaluators: Map[String, Evaluator]     = config.workflow.evaluators
 
-  /*
-  * Create a new parameterized instance from a class configuration.
-  * */
-  private def fromClassConfig[T: ClassTag](config: ClassConfig): T = {
-    newParameterizedInstance[T](config.classname, config.parameters)
-  }
+  val                lazily: Boolean                    = config.execution.lazily
+  val               storage: StorageLevel               = config.execution.storage
 
-  /*
-  * Create a new experiment based on the specified configuration for this run.
-  * */
-  def from(conf: ExperimentConfig): Experiment = {
+  val    sparkMetricsConfig: Option[SparkMetricsConfig] = config.metrics.spark
+  val    appliMetricsConfig: Option[AppliMetricsConfig] = config.metrics.appli
 
-    // Create beans to be used in the experiment.
-    val Array(appliWriter, sparkWriter) =
-      Array(conf.metrics.appli, conf.metrics.spark)
-        .map(_.map(_.writer).map(fromClassConfig[Writer]))
-
-    val Array(transformers, preprocessors, postprocessors) =
-      Array(conf.workflow.transformers, conf.workflow.preprocessors, conf.workflow.postprocessors)
-        .map(_.map(fromClassConfig[PipelineStage]))
-        .map(stages => new Pipeline().setStages(stages))
-
-    val reader     = fromClassConfig[Reader](conf.workflow.reader)
-    val estimator  = fromClassConfig[AnyEstimator](conf.workflow.estimator)
-
-    val splitter   = conf.workflow.splitter.map(fromClassConfig[Splitter])
-    val evaluators = conf.workflow.evaluators.map(fromClassConfig[Evaluator])
-    val names      = conf.workflow.evaluators.map(_.name.getOrElse(throw new IllegalArgumentException("Missing name for evaluator")))
-
-    val storage    = cast[StorageLevel](StorageLevel.getClass.getMethod(conf.execution.storage).invoke(StorageLevel))
-
-    val sparkConf  = new SparkConf().setAll(conf.spark)
-
-    // Inject beans and create a new experiment.
-    new Experiment(storage, conf.execution.lazily, sparkConf, appliWriter, sparkWriter,
-      reader, transformers, splitter, preprocessors, estimator, postprocessors, names.zip(evaluators))
-  }
-}
-
-class Experiment(
-  storage: StorageLevel, lazily: Boolean, sparkConf: SparkConf, appliWriter: Option[Writer], sparkWriter: Option[Writer],
-  reader: Reader, transformers: Pipeline, splitter: Option[Splitter], preprocessors: Pipeline,
-  estimator: AnyEstimator, postprocessors: Pipeline, evaluators: Array[(String, Evaluator)]
-) {
+  val             sparkConf: SparkConf                  = config.sparkConf
 
   def perform(): Unit = {
-    withNewSparkSession(sparkConf, implicit session => execute)
+    withSparkSession(sparkConf, implicit spark => execute)
   }
 
-  private def execute()(implicit session: SparkSession): Unit = {
+  private def execute()(implicit spark: SparkSession): Unit = {
     // Reading raw dataset.
     val raw = reader.read()
 
@@ -90,11 +56,12 @@ class Experiment(
       Array(train, test).foreach(_.persist(storage).count())
 
     // Start collect of Spark metrics if enabled.
-    val sparkMetrics = sparkWriter.map(_ => TaskMetrics(session))
-    sparkMetrics.foreach(_.begin())
+    val collector = sparkMetricsConfig.map(_.level).map(MetricsCollectors.fromLevel)
+
+    ifDefined(collector)(_.begin())
 
     // Fit on train data and transform test data
-    val (      model,       fitTime) = time { estimator.fit(train) }
+    val (      model,       fitTime) = time { estimators.fit(train) }
     val (predictions, transformTime) = time {
       val predictions = model.transform(test)
       // Force DataFrame computation when collecting metrics if enabled
@@ -104,7 +71,7 @@ class Experiment(
     }
 
     // Stop collect of Spark metrics if enabled.
-    sparkMetrics.foreach(_.end())
+    ifDefined(collector)(_.end())
 
     // Apply postprocessing.
     val postprocessing = postprocessors.fit(predictions)
@@ -114,20 +81,16 @@ class Experiment(
     results.persist(storage)
 
     // Collect applicative metrics if enabled.
-    val appliMetrics = appliWriter.map(_ =>
-      (for ((name, evaluator) <- evaluators)
-        yield               name -> evaluator.evaluate(results)).toMap[String, AnyVal]
-        + (            "fitTime" ->              fitTime)
-        + (      "transformTime" ->        transformTime)
-        + (         "trainCount" ->        train.count())
-        + ("resultsFirstRowSize" -> results.first().size)
-        + (          "testCount" ->         test.count())
-    )
-
-    // Save metrics.
-    import session.implicits._
-    sparkMetrics.foreach(metrics => sparkWriter.foreach(_.write(metrics.createTaskMetricsDF())))
-    appliMetrics.foreach(metrics => appliWriter.foreach(_.write(metrics.toSeq.toDF("name", "value"))))
+    import spark.implicits._
+    ifDefined(sparkMetricsConfig.map(_.writer), collector)((writer, collector) => writer.write(collector.collect()))
+    ifDefined(appliMetricsConfig.map(_.writer))(writer => {
+      val evaluMetrics = evaluators.mapValues(_.evaluate(results))
+      val appliMetrics = Map[String, Double](
+        "fitTime" -> fitTime, "transformTime" -> transformTime,
+        "trainCount" -> train.count(), "testCount" -> test.count(),
+        "resultsFirstRowSize" -> results.first().size)
+      writer.write((evaluMetrics.toSeq ++ appliMetrics.toSeq).toDF("name", "value"))
+    })
   }
 }
 

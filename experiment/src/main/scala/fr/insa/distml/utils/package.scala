@@ -1,8 +1,7 @@
 package fr.insa.distml
 
-import ch.cern.sparkmeasure.{StageMetrics, TaskMetrics}
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.SparkSession
 
 import scala.collection.immutable._
 import scala.reflect.ClassTag
@@ -68,9 +67,9 @@ package object utils {
   /*
   * Execute a function and collect time metric.
   * */
-  def time[R](block: => R): (R, Long) = {
+  def time[T](f: => T): (T, Long) = {
     val start  = System.currentTimeMillis()
-    val result = block
+    val result = f
     val end    = System.currentTimeMillis()
     (result, end - start)
   }
@@ -78,45 +77,29 @@ package object utils {
   /*
   * Execute a function within a fresh new Spark session.
   * */
-  def withNewSparkSession[T](sparkConf: SparkConf, block: SparkSession => () => T): T = {
+  def withSparkSession[T](sparkConf: SparkConf, block: SparkSession => () => T): T = {
 
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
 
-    val session = SparkSession.builder().config(sparkConf).getOrCreate()
-    val result = block(session)()
-    session.stop()
+    val spark = SparkSession.builder().config(sparkConf).getOrCreate()
+    val result = block(spark)()
+    spark.stop()
 
     result
   }
 
-  object Metrics extends Enumeration {
-    val Stage, Task, None = Value
+  /*
+  * Execute a function if the specified option is defined
+  * */
+  def ifDefined[T](option: Option[T])(f: T => Unit): Unit = {
+    option.foreach(f)
   }
 
   /*
-  * Execute a function and collect Spark metrics at the specified level
+  * Execute a function if the specified options are defined
   * */
-  def withSparkMetrics[T](level: Metrics.Value, block: => T)(implicit session: SparkSession): (Option[DataFrame], T) = {
-    level match {
-      // Task level
-      case Metrics.Task  =>
-        val metrics = TaskMetrics(session)
-        metrics.begin()
-        val result = block
-        metrics.end()
-        (Some(metrics.createTaskMetricsDF()), result)
-      // Stage level
-      case Metrics.Stage =>
-        val metrics = StageMetrics(session)
-        metrics.begin()
-        val result = block
-        metrics.end()
-        (Some(metrics.createStageMetricsDF()), result)
-      // None level
-      case Metrics.None  =>
-        val result = block
-        (None, result)
-    }
+  def ifDefined[T, C](optionA: Option[T], optionB: Option[C])(f: (T, C) => Unit): Unit = {
+    optionA.foreach(a => optionB.foreach(b => f(a, b)))
   }
 }

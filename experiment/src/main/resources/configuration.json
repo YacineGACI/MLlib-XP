@@ -21,6 +21,7 @@
       }
     },
     "spark": {
+      "level": "task",
       "writer": {
         "classname": "fr.insa.distml.writer.SparkWriter",
         "parameters": {
@@ -70,28 +71,28 @@
       }
     },
     "preprocessors": [],
-    "estimator": {
-      "classname": "org.apache.spark.ml.classification.DecisionTreeClassifier",
-      "parameters": {
-        "maxDepth": 10
-      }
-    },
-    "postprocessors": [],
-    "evaluators": [
+    "estimators": [
       {
-        "name": "f1",
+        "classname": "org.apache.spark.ml.classification.DecisionTreeClassifier",
+        "parameters": {
+          "maxDepth": 10
+        }
+      }
+    ],
+    "postprocessors": [],
+    "evaluators": {
+      "f1": {
         "classname": "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator",
         "parameters": {
           "metricName": "f1"
         }
       },
-      {
-        "name": "accuracy",
+      "accuracy": {
         "classname": "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator",
         "parameters": {
           "metricName": "accuracy"
         }
       }
-    ]
+    }
   }
 }

@@ -1,8 +1,11 @@
 package fr.insa.distml
 
 import scopt.OptionParser
+
 import play.api.libs.json._
+
 import scala.reflect.io.Path
+
 import fr.insa.distml.experiment._
 import fr.insa.distml.experiment.ExperimentConfigReads._
 
@@ -31,7 +34,7 @@ object Main {
 
         // Validate Json and start experiment
         json.validate[ExperimentConfig] match {
-          case JsSuccess(config, _) => Experiment.from(config).perform()
+          case JsSuccess(config, _) => new Experiment(config).perform()
           case JsError(errors)      => throw new IllegalArgumentException(errors.toString())
         }
     }

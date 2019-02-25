@@ -55,9 +55,9 @@ class Experiment(config: ExperimentConfig) {
     if(!lazily)
       Array(train, test).foreach(_.persist(storage).count())
 
-    // Start collect of Spark metrics if enabled.
     val collector = sparkMetricsConfig.map(_.level).map(MetricsCollectors.fromLevel)
 
+    // Start collect of Spark metrics if enabled.
     ifDefined(collector)(_.begin())
 
     // Fit on train data and transform test data
@@ -80,15 +80,18 @@ class Experiment(config: ExperimentConfig) {
     // Persist DataFrame before looping on each evaluator.
     results.persist(storage)
 
-    // Collect applicative metrics if enabled.
+    // Save metrics if enabled.
     import spark.implicits._
     ifDefined(sparkMetricsConfig.map(_.writer), collector)((writer, collector) => writer.write(collector.collect()))
     ifDefined(appliMetricsConfig.map(_.writer))(writer => {
       val evaluMetrics = evaluators.mapValues(_.evaluate(results))
       val appliMetrics = Map[String, Double](
-        "fitTime" -> fitTime, "transformTime" -> transformTime,
-        "trainCount" -> train.count(), "testCount" -> test.count(),
-        "resultsFirstRowSize" -> results.first().size)
+                    "fitTime" ->       fitTime,
+              "transformTime" -> transformTime,
+                 "trainCount" -> train.count(),
+                  "testCount" ->  test.count(),
+        "resultsFirstRowSize" -> results.first().size
+      )
       writer.write((evaluMetrics ++ appliMetrics).toSeq.toDF("name", "value"))
     })
   }

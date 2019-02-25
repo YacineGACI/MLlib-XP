@@ -32,9 +32,9 @@ package object utils {
 
       // Un-boxing Java Object to Scala AnyVal
       val cls = value match {
-        case _: java.lang.Integer => classOf[Int]
-        case _: java.lang.Double  => classOf[Double]
-        case _: java.lang.Boolean => classOf[Boolean]
+        case _: java.lang.Integer => classOf[Int      ]
+        case _: java.lang.Double  => classOf[Double   ]
+        case _: java.lang.Boolean => classOf[Boolean  ]
         case _: Map[_, _]         => classOf[Map[_, _]] // To interpret a Map$Map1 type as a Map type
         case o                    => o.getClass
       }
@@ -54,14 +54,14 @@ package object utils {
   def castArray[T: ClassTag](array: Array[_]): Array[T] = {
     array
       .map(asInstanceOfOption[T])
-      .map(_.getOrElse(throw new IllegalArgumentException("Failed to cast array content")))
+      .map(_.getOrElse(throw new ClassCastException("Failed to cast array content")))
   }
 
   /*
   * Cast an object of type Any to an object of T.
   * */
   def cast[T: ClassTag](obj: Any): T = {
-    asInstanceOfOption[T](obj).getOrElse(throw new IllegalArgumentException("Failed to cast object"))
+    asInstanceOfOption[T](obj).getOrElse(throw new ClassCastException("Failed to cast object"))
   }
 
   /*
